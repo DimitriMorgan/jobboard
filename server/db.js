@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS jobs (
   contracts TEXT NOT NULL DEFAULT '[]',
   techs TEXT NOT NULL DEFAULT '[]',
   salary TEXT,
+  tjm_min REAL,
+  tjm_max REAL,
+  salary_min REAL,
+  salary_max REAL,
+  currency TEXT,
   url TEXT NOT NULL,
   apply_url TEXT,
   published_at TEXT,
@@ -78,6 +83,11 @@ export function rowToJob(row, latestRunId) {
     contracts: parse(row.contracts, []),
     techs: parse(row.techs, []),
     salary: row.salary,
+    tjmMin: row.tjm_min,
+    tjmMax: row.tjm_max,
+    salaryMin: row.salary_min,
+    salaryMax: row.salary_max,
+    currency: row.currency,
     url: row.url,
     applyUrl: row.apply_url,
     publishedAt: row.published_at,
@@ -101,13 +111,18 @@ export function openDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  const cols = new Set(db.prepare('PRAGMA table_info(jobs)').all().map((c) => c.name));
+  for (const [col, type] of [['tjm_min', 'REAL'], ['tjm_max', 'REAL'], ['salary_min', 'REAL'], ['salary_max', 'REAL'], ['currency', 'TEXT']]) {
+    if (!cols.has(col)) db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${type}`);
+  }
 
   const stmts = {
     getJob: db.prepare('SELECT * FROM jobs WHERE id = ?'),
-    insertJob: db.prepare(`INSERT INTO jobs (id, source, source_id, title, company, location, country, remote, contracts, techs, salary, url, apply_url,
+    insertJob: db.prepare(`INSERT INTO jobs (id, source, source_id, title, company, location, country, remote, contracts, techs, salary, tjm_min, tjm_max, salary_min, salary_max, currency, url, apply_url,
       published_at, description, excerpt, tags, fingerprint, first_seen_at, last_seen_at, first_run_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-    updateJob: db.prepare(`UPDATE jobs SET title = ?, company = ?, location = ?, country = ?, remote = ?, contracts = ?, techs = ?, salary = ?, url = ?, apply_url = ?,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    updateJob: db.prepare(`UPDATE jobs SET title = ?, company = ?, location = ?, country = ?, remote = ?, contracts = ?, techs = ?, salary = ?,
+      tjm_min = COALESCE(?, tjm_min), tjm_max = COALESCE(?, tjm_max), salary_min = COALESCE(?, salary_min), salary_max = COALESCE(?, salary_max), currency = COALESCE(?, currency), url = ?, apply_url = ?,
       published_at = COALESCE(?, published_at), description = CASE WHEN length(?) > length(COALESCE(description, '')) THEN ? ELSE description END,
       excerpt = CASE WHEN length(?) > length(COALESCE(excerpt, '')) THEN ? ELSE excerpt END, tags = ?, fingerprint = ?, last_seen_at = ? WHERE id = ?`),
     sourceIds: db.prepare('SELECT source_id FROM jobs WHERE source = ?'),
@@ -144,14 +159,15 @@ export function openDb(dbPath) {
           const existing = stmts.getJob.get(j.id);
           if (existing) {
             stmts.updateJob.run(
-              j.title, j.company, j.location, j.country, j.remote, JSON.stringify(j.contracts), JSON.stringify(j.techs), j.salary, j.url, j.applyUrl,
+              j.title, j.company, j.location, j.country, j.remote, JSON.stringify(j.contracts), JSON.stringify(j.techs), j.salary,
+              j.tjmMin, j.tjmMax, j.salaryMin, j.salaryMax, j.currency, j.url, j.applyUrl,
               j.publishedAt, j.description, j.description, j.excerpt, j.excerpt, JSON.stringify(j.tags), j.fingerprint, now, j.id,
             );
             updated++;
           } else {
             stmts.insertJob.run(
               j.id, j.source, j.sourceId, j.title, j.company, j.location, j.country, j.remote, JSON.stringify(j.contracts), JSON.stringify(j.techs),
-              j.salary, j.url, j.applyUrl, j.publishedAt || now, j.description, j.excerpt, JSON.stringify(j.tags), j.fingerprint, now, now, runId,
+              j.salary, j.tjmMin, j.tjmMax, j.salaryMin, j.salaryMax, j.currency, j.url, j.applyUrl, j.publishedAt || now, j.description, j.excerpt, JSON.stringify(j.tags), j.fingerprint, now, now, runId,
             );
             inserted++;
           }
@@ -250,17 +266,27 @@ export function openDb(dbPath) {
         params.push(runId ?? -1);
       }
       if (filters.favorite) where.push('favorite = 1');
+      if (Number(filters.tjmMin) > 0) {
+        where.push('COALESCE(tjm_max, tjm_min) >= ?');
+        params.push(Number(filters.tjmMin));
+      }
+      if (Number(filters.salaryMin) > 0) {
+        where.push('COALESCE(salary_max, salary_min) >= ?');
+        params.push(Number(filters.salaryMin));
+      }
+      if (filters.withPay) where.push('(tjm_min IS NOT NULL OR salary_min IS NOT NULL)');
       if (filters.hideStale) {
         where.push('last_seen_at >= ?');
         params.push(new Date(Date.now() - 7 * 86400e3).toISOString());
       }
-      const order =
-        filters.sort === 'seen'
-          ? 'first_seen_at DESC'
-          : filters.sort === 'status'
-            ? 'status_updated_at DESC, published_at DESC'
-            : 'COALESCE(published_at, first_seen_at) DESC';
-      const sql = `SELECT id, source, source_id, title, company, location, country, remote, contracts, techs, salary, url, apply_url, published_at, excerpt, tags,
+      const ORDERS = {
+        seen: 'first_seen_at DESC',
+        status: 'status_updated_at DESC, published_at DESC',
+        tjm: 'COALESCE(tjm_max, tjm_min) DESC NULLS LAST, COALESCE(published_at, first_seen_at) DESC',
+        salary: 'COALESCE(salary_max, salary_min) DESC NULLS LAST, COALESCE(published_at, first_seen_at) DESC',
+      };
+      const order = ORDERS[filters.sort] || 'COALESCE(published_at, first_seen_at) DESC';
+      const sql = `SELECT id, source, source_id, title, company, location, country, remote, contracts, techs, salary, tjm_min, tjm_max, salary_min, salary_max, currency, url, apply_url, published_at, excerpt, tags,
         fingerprint, first_seen_at, last_seen_at, first_run_id, status, notes, favorite, status_updated_at FROM jobs
         ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order} LIMIT ?`;
       params.push(Number(filters.limit) || 1000);
@@ -276,7 +302,17 @@ export function openDb(dbPath) {
       for (const r of db.prepare('SELECT techs FROM jobs').all()) for (const t of parse(r.techs, [])) byTech[t] = (byTech[t] || 0) + 1;
       const byContract = {};
       for (const r of db.prepare('SELECT contracts FROM jobs').all()) for (const c of parse(r.contracts, [])) byContract[c] = (byContract[c] || 0) + 1;
-      return { total, newCount, byStatus, byTech, byContract, latestRun: this.latestRun() };
+      const median = (rows) => {
+        const v = rows.map((r) => r.v).filter((x) => x != null).sort((a, b) => a - b);
+        return v.length ? v[Math.floor(v.length / 2)] : null;
+      };
+      const pay = {
+        tjmMedian: median(db.prepare(`SELECT (COALESCE(tjm_min, tjm_max) + COALESCE(tjm_max, tjm_min)) / 2 AS v FROM jobs WHERE tjm_min IS NOT NULL AND (currency IS NULL OR currency = '€')`).all()),
+        salaryMedian: median(db.prepare(`SELECT (COALESCE(salary_min, salary_max) + COALESCE(salary_max, salary_min)) / 2 AS v FROM jobs WHERE salary_min IS NOT NULL AND (currency IS NULL OR currency = '€')`).all()),
+        withTjm: db.prepare('SELECT COUNT(*) AS n FROM jobs WHERE tjm_min IS NOT NULL').get().n,
+        withSalary: db.prepare('SELECT COUNT(*) AS n FROM jobs WHERE salary_min IS NOT NULL').get().n,
+      };
+      return { total, newCount, byStatus, byTech, byContract, pay, latestRun: this.latestRun() };
     },
 
     close() {

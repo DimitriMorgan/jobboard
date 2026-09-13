@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, CONTRACT_LABELS, STATUS_LABELS, formatDate } from '../api.js';
+import { api, CONTRACT_LABELS, STATUS_LABELS, formatDate, formatTjm, formatAnnual } from '../api.js';
 
 const COLUMNS = ['a_postuler', 'candidature_envoyee', 'relance', 'entretien', 'offre_recue', 'refus'];
 
@@ -35,6 +35,11 @@ export default function TrackingBoard({ onSelect, selectedId, onUpdate }) {
                 <p className="small">
                   {j.contracts.map((c) => CONTRACT_LABELS[c]).join(', ')} · mis à jour {formatDate(j.statusUpdatedAt)}
                 </p>
+                {formatTjm(j) || formatAnnual(j) ? (
+                  <p className="small">
+                    {formatTjm(j) ? <span className="pay tjm">TJM {formatTjm(j)}</span> : null} {formatAnnual(j) ? <span className="pay annual">{formatAnnual(j)}</span> : null}
+                  </p>
+                ) : null}
                 {j.notes ? <p className="note small">{j.notes.slice(0, 120)}</p> : null}
                 <div className="board-actions" onClick={(e) => e.stopPropagation()}>
                   <select value={j.status} onChange={(e) => move(j.id, e.target.value)}>

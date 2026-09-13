@@ -13,6 +13,9 @@ export const DEFAULT_FILTERS = {
   onlyNew: false,
   favorite: false,
   hideStale: false,
+  withPay: false,
+  tjmMin: 0,
+  salaryMin: 0,
   sort: 'published',
 };
 
@@ -91,6 +94,27 @@ export default function Filters({ meta, stats, filters, onChange }) {
         <label className="check">
           <input type="checkbox" checked={filters.hideStale} onChange={(e) => set({ hideStale: e.target.checked })} /> Masquer les offres disparues (non revues depuis 7 j)
         </label>
+      </div>
+
+      <div className="filter-group">
+        <h3>Rémunération</h3>
+        <label className="num">
+          TJM minimum (freelance, €/jour)
+          <input type="number" min={0} step={50} placeholder="ex. 500" value={filters.tjmMin || ''} onChange={(e) => set({ tjmMin: Number(e.target.value) || 0 })} />
+        </label>
+        <label className="num">
+          Salaire annuel minimum (CDI, €)
+          <input type="number" min={0} step={1000} placeholder="ex. 45000" value={filters.salaryMin || ''} onChange={(e) => set({ salaryMin: Number(e.target.value) || 0 })} />
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={filters.withPay} onChange={(e) => set({ withPay: e.target.checked })} /> Uniquement avec rémunération connue
+        </label>
+        {stats?.pay ? (
+          <p className="hint">
+            TJM médian : {stats.pay.tjmMedian ? `${Math.round(stats.pay.tjmMedian)} €/j` : '—'} ({stats.pay.withTjm} offres) · Salaire médian :{' '}
+            {stats.pay.salaryMedian ? `${Math.round(stats.pay.salaryMedian / 1000)} k€/an` : '—'} ({stats.pay.withSalary} offres)
+          </p>
+        ) : null}
       </div>
 
       <div className="filter-group">

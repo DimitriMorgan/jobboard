@@ -23,6 +23,7 @@ export default {
           remoteHint: 'full',
           contractHints: [/full/i.test(it.employmentType || '') ? 'cdi' : /contract|freelance/i.test(it.employmentType || '') ? 'freelance' : null].filter(Boolean),
           salaryParts: { min: it.minSalary, max: it.maxSalary, currency: it.currency || '$', period: '/ an' },
+          compensation: { salaryMin: it.minSalary, salaryMax: it.maxSalary, currency: /eur|€/i.test(it.currency || '') ? '€' : '$' },
           url,
           publishedAt: it.pubDate,
           descriptionHtml: it.description || it.excerpt,

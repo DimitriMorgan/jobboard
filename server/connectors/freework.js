@@ -42,6 +42,7 @@ export default {
             contractHints: (it.contracts || []).map((c) => CONTRACT_MAP[c] || 'autre'),
             techHints: [tech],
             salary: salaryBits.join(' · '),
+            compensation: { tjmMin: it.minDailySalary, tjmMax: it.maxDailySalary, salaryMin: it.minAnnualSalary, salaryMax: it.maxAnnualSalary, currency: '€' },
             url: it.slug ? `https://www.free-work.com/fr/tech-it/${jobSlug}/job-mission/${it.slug}` : `https://www.free-work.com/fr/tech-it/jobs?query=${encodeURIComponent(it.title)}`,
             publishedAt: it.publishedAt || it.createdAt || it.updatedAt,
             descriptionHtml: [it.description, it.candidateProfile, it.companyDescription].filter(Boolean).join('<hr>'),

@@ -191,6 +191,8 @@ export default function App() {
                   <option value="published">Date de publication</option>
                   <option value="seen">Date de découverte</option>
                   <option value="status">Dernier changement de statut</option>
+                  <option value="tjm">TJM décroissant</option>
+                  <option value="salary">Salaire décroissant</option>
                 </select>
               </label>
             </div>

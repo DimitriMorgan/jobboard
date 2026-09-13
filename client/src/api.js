@@ -40,6 +40,19 @@ export const STATUS_LABELS = {
 export const CONTRACT_LABELS = { freelance: 'Freelance', cdi: 'CDI', cdd: 'CDD', interim: 'Intérim', alternance: 'Alternance', stage: 'Stage', autre: 'Autre' };
 export const REMOTE_LABELS = { full: 'Full remote', partial: 'Télétravail partiel', none: 'Sur site' };
 
+const fmtN = (n) => Math.round(n).toLocaleString('fr-FR');
+export function formatTjm(job) {
+  if (job.tjmMin == null) return '';
+  const c = job.currency || '€';
+  return `${job.tjmMin === job.tjmMax || job.tjmMax == null ? fmtN(job.tjmMin) : `${fmtN(job.tjmMin)} - ${fmtN(job.tjmMax)}`} ${c}/jour`;
+}
+export function formatAnnual(job) {
+  if (job.salaryMin == null) return '';
+  const c = job.currency || '€';
+  const k = (n) => (n >= 1000 ? `${Math.round(n / 1000)} k` : fmtN(n));
+  return `${job.salaryMin === job.salaryMax || job.salaryMax == null ? k(job.salaryMin) : `${k(job.salaryMin)} - ${k(job.salaryMax)}`}${c}/an`;
+}
+
 export function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);

@@ -1,8 +1,10 @@
 import React from 'react';
-import { CONTRACT_LABELS, REMOTE_LABELS, STATUS_LABELS, formatDate } from '../api.js';
+import { CONTRACT_LABELS, REMOTE_LABELS, STATUS_LABELS, formatDate, formatTjm, formatAnnual } from '../api.js';
 
 export default function JobCard({ job, meta, selected, onSelect, onUpdate }) {
   const source = meta?.sources?.find((s) => s.id === job.source);
+  const tjm = formatTjm(job);
+  const annual = formatAnnual(job);
   return (
     <article className={`job-card ${selected ? 'selected' : ''} ${job.isNew ? 'is-new' : ''} ${job.status === 'ignore' ? 'is-ignored' : ''}`} onClick={() => onSelect(job.id)}>
       <div className="job-card-main">
@@ -14,7 +16,11 @@ export default function JobCard({ job, meta, selected, onSelect, onUpdate }) {
           <span className="company">{job.company}</span>
           {job.location ? <span>· {job.location}</span> : null}
           {job.remote ? <span>· {REMOTE_LABELS[job.remote]}</span> : null}
-          {job.salary ? <span className="salary">· {job.salary}</span> : null}
+        </div>
+        <div className="pay-row">
+          {tjm ? <span className="pay tjm" title="Taux journalier (freelance)">TJM {tjm}</span> : null}
+          {annual ? <span className="pay annual" title="Salaire annuel (CDI)">Salaire {annual}</span> : null}
+          {!tjm && !annual ? <span className="pay unknown">{job.salary ? job.salary : 'Rémunération non précisée'}</span> : null}
         </div>
         <div className="badges">
           {job.contracts.map((c) => (

@@ -31,6 +31,7 @@ export default {
             contractHints: [it.contract_type === 'permanent' ? 'cdi' : it.contract_type === 'contract' ? 'freelance' : null].filter(Boolean),
             techHints: [tech],
             salaryParts: { min: it.salary_min, max: it.salary_max, currency: '€', period: '/ an' },
+            compensation: { salaryMin: it.salary_min, salaryMax: it.salary_max, currency: '€' },
             url: it.redirect_url,
             publishedAt: it.created,
             descriptionText: it.description,

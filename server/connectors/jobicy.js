@@ -24,6 +24,7 @@ export default {
             remoteHint: 'full',
             contractHints: (Array.isArray(it.jobType) ? it.jobType : [it.jobType]).map((t) => (/full/i.test(t || '') ? 'cdi' : /contract|freelance/i.test(t || '') ? 'freelance' : null)).filter(Boolean),
             salaryParts: { min: it.annualSalaryMin, max: it.annualSalaryMax, currency: it.salaryCurrency || '€', period: '/ an' },
+            compensation: { salaryMin: it.annualSalaryMin, salaryMax: it.annualSalaryMax, currency: /usd/i.test(it.salaryCurrency || '') ? '$' : /gbp/i.test(it.salaryCurrency || '') ? '£' : '€' },
             url: it.url,
             publishedAt: it.pubDate,
             descriptionHtml: it.jobDescription || it.jobExcerpt,

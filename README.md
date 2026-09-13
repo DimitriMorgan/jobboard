@@ -4,7 +4,8 @@ Plateforme locale qui agrège les offres d'emploi **freelance et CDI** pour les 
 
 - un bouton **Actualiser** qui interroge toutes les plateformes (chacune isolée : une source en panne n'empêche pas les autres) ;
 - des **filtres** : technos, type de contrat, lieu (France / full remote), télétravail, période, source, statut de suivi, favoris, recherche libre ;
-- une **fiche détaillée** par offre (description, rémunération, contrat, technos, dates, doublons repérés sur d'autres plateformes) avec **lien direct vers l'offre** ;
+- une **fiche détaillée** par offre (description, contrat, technos, dates, doublons repérés sur d'autres plateformes) avec **lien direct vers l'offre** ;
+- la **rémunération structurée** : **TJM** (€/jour) pour le freelance et **salaire annuel** pour le CDI, extraits des données des plateformes ou du texte de l'offre (« TJM 550 », « 500-600 €/jour », « 45-55k€ », « 3 400 € brut / mois »…), avec filtres « TJM minimum » / « salaire minimum », tri par rémunération et médianes affichées ;
 - un **suivi de candidatures** : statut (nouveau, vu, à postuler, candidature envoyée, relancé, entretien, offre reçue, refus, ignoré), notes personnelles, favoris, tableau « Mon suivi » ;
 - le marquage **« Nouveau »** des offres apparues depuis la dernière actualisation, pour une consultation quotidienne ;
 - une page **Sources** avec l'état de chaque connecteur et des liens de recherche pré-remplis vers les plateformes sans API exploitable.
@@ -58,7 +59,7 @@ Les sources sont désactivables via `DISABLED_SOURCES=hellowork,hackernews`.
 ## Fonctionnement
 
 1. Chaque connecteur (`server/connectors/*.js`) interroge sa plateforme avec les mots-clés de chaque techno et renvoie des offres brutes.
-2. `server/normalize.js` nettoie le HTML, détecte les technos (regex sur titre + description + tags), infère le contrat (freelance / CDI / CDD…), le télétravail et le pays. Les offres qui ne mentionnent aucune des cinq technos sont écartées.
+2. `server/normalize.js` nettoie le HTML, détecte les technos (regex sur titre + description + tags), infère le contrat (freelance / CDI / CDD…), le télétravail et le pays. Les offres qui ne mentionnent aucune des cinq technos sont écartées. `server/compensation.js` extrait le TJM et le salaire annuel (les valeurs structurées fournies par la plateforme priment sur le texte ; un salaire mensuel est ramené à l'année ; les montants en $ ou £ conservent leur devise).
 3. `server/db.js` insère les nouvelles offres (rattachées à l'actualisation qui les a découvertes) et met à jour les autres sans toucher au suivi (statut, notes, favori).
 4. Le front (`client/`, React + Vite) consomme l'API `/api/*` et affiche listes, filtres, fiche détaillée, tableau de suivi et état des sources.
 
@@ -74,7 +75,7 @@ Une offre non revue depuis 7 jours est signalée « peut-être retirée » (filt
 
 | Méthode | Route | Description |
 | --- | --- | --- |
-| GET | `/api/jobs?techs=react,php&contracts=freelance&country=FR_OR_REMOTE&sinceDays=7&q=symfony&onlyNew=1` | Liste filtrée |
+| GET | `/api/jobs?techs=react,php&contracts=freelance&country=FR_OR_REMOTE&sinceDays=7&q=symfony&onlyNew=1&tjmMin=500&salaryMin=45000&withPay=1&sort=tjm` | Liste filtrée (tri : `published`, `seen`, `status`, `tjm`, `salary`) |
 | GET | `/api/jobs/:id` | Détail + doublons sur d'autres sources |
 | PATCH | `/api/jobs/:id` | `{ status, notes, favorite }` |
 | POST | `/api/refresh` | Lance une actualisation (`{ only: "freework,wttj" }` optionnel) |

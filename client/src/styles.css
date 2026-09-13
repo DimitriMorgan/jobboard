@@ -85,6 +85,12 @@ code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; }
 .job-meta { color: var(--muted); font-size: 13px; margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; }
 .job-meta .company { color: var(--text); font-weight: 500; }
 .job-meta .salary { color: var(--green); }
+.pay-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pay { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 6px; }
+.pay.tjm { background: rgba(167, 139, 250, 0.18); color: var(--purple); }
+.pay.annual { background: rgba(60, 207, 142, 0.16); color: var(--green); }
+.pay.unknown { background: transparent; color: var(--muted); font-weight: 400; padding-left: 0; }
+.num { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--bg-3); color: var(--muted); }
 .badge.contract.freelance { background: rgba(167, 139, 250, 0.2); color: var(--purple); }

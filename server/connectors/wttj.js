@@ -6,6 +6,17 @@ import { TECH_QUERIES } from '../normalize.js';
 const CONTRACT_MAP = { full_time: 'cdi', freelance: 'freelance', temporary: 'cdd', internship: 'stage', apprenticeship: 'alternance', part_time: 'autre', vie: 'autre' };
 const REMOTE_MAP = { fulltime: 'full', partial: 'partial', punctual: 'partial', no: 'none' };
 
+function wttjCompensation(hit) {
+  const min = Number(hit.salary_minimum) || null;
+  const max = Number(hit.salary_maximum) || null;
+  if (!min && !max) return {};
+  const period = String(hit.salary_period || 'year').toLowerCase();
+  const currency = /usd|\$/i.test(hit.salary_currency || '') ? '$' : /gbp|£/i.test(hit.salary_currency || '') ? '£' : '€';
+  if (/day|jour|daily/.test(period)) return { tjmMin: min, tjmMax: max, currency };
+  const mult = /month|mois/.test(period) ? 12 : 1;
+  return { salaryMin: min && min * mult, salaryMax: max && max * mult, currency };
+}
+
 export default {
   id: 'wttj',
   name: 'Welcome to the Jungle',
@@ -58,6 +69,7 @@ export default {
           contractHints: [CONTRACT_MAP[hit.contract_type] || 'autre'],
           techHints: [tech],
           salaryParts: { min: hit.salary_minimum, max: hit.salary_maximum, currency: hit.salary_currency || '€', period: hit.salary_period ? `/ ${hit.salary_period}` : '' },
+          compensation: wttjCompensation(hit),
           url: orgSlug && hit.slug ? `https://www.welcometothejungle.com/fr/companies/${orgSlug}/jobs/${hit.slug}` : `https://www.welcometothejungle.com/fr/jobs?query=${encodeURIComponent(hit.name)}`,
           publishedAt: hit.published_at,
           descriptionHtml: hit.description || '',

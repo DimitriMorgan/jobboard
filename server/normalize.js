@@ -1,6 +1,7 @@
 // Normalisation des offres : détection des technos, du type de contrat, du télétravail, nettoyage HTML.
 import sanitizeHtml from 'sanitize-html';
 import * as cheerio from 'cheerio';
+import { extractCompensation, formatTjm, formatAnnual } from './compensation.js';
 
 export const TECHS = [
   { id: 'javascript', label: 'JavaScript', re: /\b(?:javascript|typescript|ecmascript|es6|es20\d\d)\b|(?<![a-z])js\b|[a-z]js\b/i },
@@ -135,7 +136,8 @@ export function slugify(s) {
  * Renvoie null si l'offre ne concerne aucune des technos suivies.
  *
  * Champs bruts acceptés : sourceId, title, company, location, countryHint, remoteHint, contractHints[],
- * techHints[], salary (string) ou salaryParts {min,max,currency,period}, url, applyUrl, publishedAt,
+ * techHints[], salary (string), salaryParts {min,max,currency,period}, compensation {tjmMin,tjmMax,salaryMin,salaryMax,currency},
+ * url, applyUrl, publishedAt,
  * descriptionHtml, descriptionText, tags[]
  */
 export function normalizeJob(source, raw) {
@@ -156,7 +158,9 @@ export function normalizeJob(source, raw) {
   const location = cleanText(raw.location);
   const country = inferCountry({ hint: raw.countryHint, location, remote });
   const company = cleanText(raw.company) || 'Entreprise non précisée';
-  const salary = cleanText(raw.salary) || (raw.salaryParts ? formatSalary(raw.salaryParts) : '');
+  const salaryText = cleanText(raw.salary) || (raw.salaryParts ? formatSalary(raw.salaryParts) : '');
+  const comp = extractCompensation({ salaryText, title, description: descriptionText, structured: raw.compensation || {} });
+  const salary = [formatTjm(comp.tjmMin, comp.tjmMax, comp.currency || '€'), formatAnnual(comp.salaryMin, comp.salaryMax, comp.currency || '€')].filter(Boolean).join(' · ') || salaryText;
 
   return {
     id: `${source}:${String(raw.sourceId)}`,
@@ -170,6 +174,11 @@ export function normalizeJob(source, raw) {
     contracts,
     techs: [...techs],
     salary,
+    tjmMin: comp.tjmMin,
+    tjmMax: comp.tjmMax,
+    salaryMin: comp.salaryMin,
+    salaryMax: comp.salaryMax,
+    currency: comp.currency,
     url: raw.url,
     applyUrl: raw.applyUrl || null,
     publishedAt: toIso(raw.publishedAt),

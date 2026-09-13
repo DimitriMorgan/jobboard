@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CONTRACT_LABELS, REMOTE_LABELS, STATUS_LABELS, formatDateTime } from '../api.js';
+import { CONTRACT_LABELS, REMOTE_LABELS, STATUS_LABELS, formatDateTime, formatTjm, formatAnnual } from '../api.js';
 
 export default function JobDetail({ job, meta, onClose, onUpdate }) {
   const [notes, setNotes] = useState(job.notes || '');
@@ -86,9 +86,13 @@ export default function JobDetail({ job, meta, onClose, onUpdate }) {
           <dd>{job.contracts.map((c) => CONTRACT_LABELS[c] || c).join(', ')}</dd>
           <dt>Technos</dt>
           <dd>{job.techs.map((t) => meta?.techs?.find((x) => x.id === t)?.label || t).join(', ')}</dd>
-          {job.salary ? (
+          <dt>TJM (freelance)</dt>
+          <dd>{formatTjm(job) ? <span className="pay tjm">{formatTjm(job)}</span> : <span className="muted">non précisé</span>}</dd>
+          <dt>Salaire annuel (CDI)</dt>
+          <dd>{formatAnnual(job) ? <span className="pay annual">{formatAnnual(job)}</span> : <span className="muted">non précisé</span>}</dd>
+          {job.salary && !formatTjm(job) && !formatAnnual(job) ? (
             <>
-              <dt>Rémunération</dt>
+              <dt>Rémunération (texte)</dt>
               <dd>{job.salary}</dd>
             </>
           ) : null}

@@ -16,6 +16,7 @@ export default {
       remoteHint: 'full',
       contractHints: [],
       salaryParts: { min: it.salary_min, max: it.salary_max, currency: '$', period: '/ an' },
+      compensation: { salaryMin: it.salary_min, salaryMax: it.salary_max, currency: '$' },
       url: it.url || `https://remoteok.com/remote-jobs/${it.slug || it.id}`,
       publishedAt: it.date || (it.epoch ? Number(it.epoch) : null),
       descriptionHtml: it.description,
