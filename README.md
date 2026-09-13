@@ -89,6 +89,8 @@ Points d'attention :
 - Les runners GitHub ont des adresses IP de datacenter : LinkedIn et HelloWork peuvent bloquer davantage que depuis un poste personnel. L'onglet Sources du site montre l'état de chaque source.
 - GitHub désactive les workflows planifiés après 60 jours sans activité sur le dépôt ; un simple commit ou un lancement manuel les réactive.
 - Les offres non revues depuis `RETENTION_DAYS` jours (60 par défaut) sont purgées de l'export.
+- Les descriptions des offres LinkedIn, WTTJ, APEC et HelloWork sont récupérées page par page, dans la limite de `DETAIL_FETCH_LIMIT` par source et par actualisation ; les offres connues sans description sont complétées au fil des jours.
+- Les données publiées vivent sur la branche `data` du dépôt (`jobs.json`, `descriptions.json`), écrasées à chaque actualisation.
 - En local, le mode statique se teste avec `npm run refresh:static` (données dans `data/static/`) puis `npm run dev:static`.
 
 ## Actualisation automatique (mode serveur)

@@ -81,7 +81,7 @@ export default {
     if (!rateLimited && limit > 0) {
       for (const job of jobs.values()) {
         if (fetched >= limit) break;
-        if (ctx.isKnown(job.sourceId)) continue;
+        if (!ctx.needsDetail(job.sourceId)) continue;
         try {
           const html = await getText(DETAIL + job.sourceId, { retries: 0 });
           const $ = cheerio.load(html);

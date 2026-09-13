@@ -147,6 +147,10 @@ export function openDb(dbPath) {
     knownSourceIds(source) {
       return new Set(stmts.sourceIds.all(source).map((r) => r.source_id));
     },
+    /** Identifiants déjà en base pour une source, avec la longueur de description connue. */
+    knownDescriptions(source) {
+      return new Map(db.prepare('SELECT source_id, length(COALESCE(description, \'\')) AS len FROM jobs WHERE source = ?').all(source).map((r) => [r.source_id, r.len]));
+    },
 
     /** Insère ou met à jour une liste d'offres normalisées. Renvoie {inserted, updated}. */
     upsertJobs(jobs, runId) {

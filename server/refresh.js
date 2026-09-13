@@ -13,9 +13,11 @@ export function createRefresher(db, { concurrency = 4, log = console, connectors
   async function runConnector(c, runId) {
     const t0 = Date.now();
     const src = (state.sources[c.id] = { status: 'running', message: 'Démarrage…', count: 0, newCount: 0, error: null, warning: null });
-    const known = db.knownSourceIds(c.id);
+    const known = db.knownDescriptions(c.id);
     const ctx = {
       isKnown: (id) => known.has(String(id)),
+      /** Vrai si l'offre est nouvelle ou connue sans description : le connecteur peut aller chercher le détail. */
+      needsDetail: (id) => !known.has(String(id)) || known.get(String(id)) < 40,
       progress: (msg) => {
         src.message = msg;
         log.info?.(`[${c.id}] ${msg}`);

@@ -130,7 +130,7 @@ export default {
 
     // Détails (description) pour les nouvelles offres.
     const limit = Number(process.env.DETAIL_FETCH_LIMIT ?? 40);
-    const toDetail = [...jobs.values()].filter((j) => j._orgSlug && j._slug && !ctx.isKnown(j.sourceId)).slice(0, limit);
+    const toDetail = [...jobs.values()].filter((j) => j._orgSlug && j._slug && ctx.needsDetail(j.sourceId)).slice(0, limit);
     await mapLimit(toDetail, 3, async (job) => {
       try {
         const d = await getJson(`https://api.welcometothejungle.com/api/v1/organizations/${job._orgSlug}/jobs/${job._slug}`, { retries: 0 });

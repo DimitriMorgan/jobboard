@@ -50,7 +50,7 @@ export default {
       }
     }
     const limit = Number(process.env.DETAIL_FETCH_LIMIT ?? 40);
-    const toDetail = [...jobs.values()].filter((j) => !j.descriptionHtml && !ctx.isKnown(j.sourceId)).slice(0, limit);
+    const toDetail = [...jobs.values()].filter((j) => !j.descriptionHtml && ctx.needsDetail(j.sourceId)).slice(0, limit);
     await mapLimit(toDetail, 3, async (job) => {
       try {
         const d = await getJson(DETAIL + job.sourceId, { retries: 0 });
