@@ -6,7 +6,7 @@ import { openDb, STATUSES } from './db.js';
 import { createRefresher } from './refresh.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
 import { TECHS, CONTRACTS } from './normalize.js';
-import { manualLinks, MANUAL_PLATFORMS } from './manualLinks.js';
+import { manualLinks, MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 import { loadEnv } from './env.js';
 
 loadEnv();

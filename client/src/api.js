@@ -1,3 +1,7 @@
+import { api as staticApi } from './api/static.js';
+
+export const IS_STATIC = import.meta.env.VITE_STATIC === '1';
+
 async function http(url, opts = {}) {
   const res = await fetch(url, { headers: { 'content-type': 'application/json' }, ...opts });
   const data = await res.json().catch(() => ({}));
@@ -5,7 +9,8 @@ async function http(url, opts = {}) {
   return data;
 }
 
-export const api = {
+const serverApi = {
+  isStatic: false,
   meta: () => http('/api/meta'),
   stats: () => http('/api/stats'),
   sources: () => http('/api/sources'),
@@ -24,6 +29,8 @@ export const api = {
   refreshStatus: () => http('/api/refresh/status'),
   manualLinks: (tech, contract) => http(`/api/manual-links?tech=${tech}&contract=${contract || ''}`),
 };
+
+export const api = IS_STATIC ? staticApi : serverApi;
 
 export const STATUS_LABELS = {
   nouveau: 'Nouveau',

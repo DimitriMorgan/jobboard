@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api.js';
+import { api, IS_STATIC } from './api.js';
+import { tracking } from './tracking.js';
 import Filters, { DEFAULT_FILTERS } from './components/Filters.jsx';
 import JobList from './components/JobList.jsx';
 import JobDetail from './components/JobDetail.jsx';
@@ -36,7 +37,15 @@ export default function App() {
       setRefresh(s);
       if (s.running) startPolling();
     });
-    return () => clearInterval(pollRef.current);
+    let off = () => {};
+    if (IS_STATIC) {
+      off = tracking.onChange(() => setFilters((f) => ({ ...f })));
+      tracking.pull().then((ok) => ok && setFilters((f) => ({ ...f })));
+    }
+    return () => {
+      clearInterval(pollRef.current);
+      off();
+    };
   }, []);
 
   useEffect(() => {
@@ -81,6 +90,7 @@ export default function App() {
       setRefresh(s);
       if (!s.running) {
         clearInterval(pollRef.current);
+        if (s.error) setError(s.error);
         loadJobs();
       }
     }, 1500);
@@ -93,6 +103,7 @@ export default function App() {
       startPolling();
     } catch (e) {
       setError(e.message);
+      if (e.code === 'NO_TOKEN') setTab('sources');
     }
   }
 
@@ -160,7 +171,19 @@ export default function App() {
           {error} <button onClick={() => setError('')}>×</button>
         </div>
       ) : null}
-      {running && refresh?.sources ? (
+      {running && refresh?.message ? (
+        <div className="banner progress">
+          <span>
+            <span className="spinner" /> {refresh.message}{' '}
+            {refresh.runUrl ? (
+              <a href={refresh.runUrl} target="_blank" rel="noopener noreferrer">
+                voir sur GitHub ↗
+              </a>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+      {running && refresh?.sources && !refresh.message ? (
         <div className="banner progress">
           {Object.entries(refresh.sources)
             .filter(([, s]) => s.status === 'running')

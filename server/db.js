@@ -220,6 +220,42 @@ export function openDb(dbPath) {
       return this.getJob(id);
     },
 
+    /** Import brut d'offres déjà normalisées (mode statique) — conserve dates de découverte et run d'origine. */
+    importJobs(rows) {
+      const stmt = db.prepare(`INSERT OR REPLACE INTO jobs (id, source, source_id, title, company, location, country, remote, contracts, techs, salary, tjm_min, tjm_max, salary_min, salary_max, currency,
+        url, apply_url, published_at, description, excerpt, tags, fingerprint, first_seen_at, last_seen_at, first_run_id, status, notes, favorite, status_updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      db.exec('BEGIN');
+      try {
+        for (const j of rows) {
+          stmt.run(
+            j.id, j.source, j.sourceId, j.title, j.company, j.location, j.country, j.remote, JSON.stringify(j.contracts || []), JSON.stringify(j.techs || []), j.salary,
+            j.tjmMin ?? null, j.tjmMax ?? null, j.salaryMin ?? null, j.salaryMax ?? null, j.currency ?? null, j.url, j.applyUrl ?? null, j.publishedAt ?? null, j.description || '', j.excerpt || '',
+            JSON.stringify(j.tags || []), j.fingerprint, j.firstSeenAt, j.lastSeenAt, j.firstRunId ?? null, j.status || 'nouveau', j.notes || '', j.favorite ? 1 : 0, j.statusUpdatedAt ?? null,
+          );
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    },
+    importRun(run) {
+      db.prepare('INSERT OR REPLACE INTO runs (id, started_at, finished_at, total_seen, total_new, summary) VALUES (?, ?, ?, ?, ?, ?)').run(
+        run.id, run.startedAt, run.finishedAt, run.totalSeen || 0, run.totalNew || 0, null,
+      );
+    },
+    importSource(s) {
+      db.prepare(`INSERT OR REPLACE INTO sources (id, last_run_at, last_status, last_error, last_count, last_new, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+        s.id, s.lastRunAt, s.lastStatus, s.lastError, s.lastCount || 0, s.lastNew || 0, s.durationMs || 0,
+      );
+    },
+    /** Supprime les offres non revues depuis `days` jours (sauf celles en cours de suivi). */
+    purgeOlderThan(days) {
+      const limit = new Date(Date.now() - days * 86400e3).toISOString();
+      return db.prepare(`DELETE FROM jobs WHERE last_seen_at < ? AND status IN ('nouveau', 'vu', 'ignore')`).run(limit).changes;
+    },
+
     deleteJob(id) {
       return stmts.deleteJob.run(id).changes > 0;
     },

@@ -1,0 +1,103 @@
+name: Actualiser les offres et publier le site
+
+on:
+  schedule:
+    - cron: '0 5 * * *' # tous les jours à 05:00 UTC (07:00 Paris en été, 06:00 en hiver)
+  workflow_dispatch:
+  push:
+    branches: ['**']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: jobboard-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    # Sur push, ne déployer que depuis la branche par défaut (le planning et le bouton Actualiser s'y exécutent déjà).
+    if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Récupérer les données précédentes (branche data)
+        run: |
+          mkdir -p data/static
+          if git fetch origin data --depth=1 2>/dev/null; then
+            git show origin/data:jobs.json > data/static/jobs.json || true
+            git show origin/data:descriptions.json > data/static/descriptions.json || true
+            echo "Données précédentes récupérées"
+          else
+            echo "Pas encore de branche data : première actualisation"
+          fi
+
+      - name: Actualiser les offres
+        run: npm run refresh:static
+        env:
+          RETENTION_DAYS: ${{ vars.RETENTION_DAYS || 60 }}
+          LINKEDIN_PAGES: ${{ vars.LINKEDIN_PAGES || 1 }}
+          DETAIL_FETCH_LIMIT: ${{ vars.DETAIL_FETCH_LIMIT || 40 }}
+          DISABLED_SOURCES: ${{ vars.DISABLED_SOURCES }}
+          FRANCE_TRAVAIL_CLIENT_ID: ${{ secrets.FRANCE_TRAVAIL_CLIENT_ID }}
+          FRANCE_TRAVAIL_CLIENT_SECRET: ${{ secrets.FRANCE_TRAVAIL_CLIENT_SECRET }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          WTTJ_ALGOLIA_APP_ID: ${{ vars.WTTJ_ALGOLIA_APP_ID }}
+          WTTJ_ALGOLIA_API_KEY: ${{ vars.WTTJ_ALGOLIA_API_KEY }}
+
+      - name: Publier les données sur la branche data
+        run: |
+          git config user.name "jobboard-bot"
+          git config user.email "jobboard-bot@users.noreply.github.com"
+          rm -rf /tmp/data-wt
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git fetch origin data --depth=1
+            git worktree add /tmp/data-wt -B data origin/data
+          else
+            git worktree add --detach /tmp/data-wt
+            (cd /tmp/data-wt && git checkout --orphan data && git rm -rfq . 2>/dev/null || true)
+          fi
+          cp data/static/jobs.json data/static/descriptions.json /tmp/data-wt/
+          cd /tmp/data-wt
+          git add -A
+          git commit -m "Données du $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "Aucun changement"
+          git push origin data
+
+      - name: Construire le site statique
+        run: |
+          export VITE_BASE="/${GITHUB_REPOSITORY#*/}/"
+          npm run build:static
+        env:
+          VITE_GITHUB_REPO: ${{ github.repository }}
+          VITE_GITHUB_BRANCH: ${{ github.ref_name }}
+
+      - name: Ajouter les données au site
+        run: |
+          mkdir -p client/dist/data
+          cp data/static/jobs.json data/static/descriptions.json client/dist/data/
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

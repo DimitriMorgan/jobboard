@@ -10,7 +10,12 @@ Plateforme locale qui agrège les offres d'emploi **freelance et CDI** pour les 
 - le marquage **« Nouveau »** des offres apparues depuis la dernière actualisation, pour une consultation quotidienne ;
 - une page **Sources** avec l'état de chaque connecteur et des liens de recherche pré-remplis vers les plateformes sans API exploitable.
 
-## Démarrage
+Deux modes de fonctionnement :
+
+- **Serveur** (`npm start`) : Express + SQLite en local ou sur une machine, actualisation en un clic.
+- **Statique** (voir « Hébergement gratuit ») : GitHub Actions actualise les données, GitHub Pages sert le site, aucun serveur à payer.
+
+## Démarrage (mode serveur)
 
 Pré-requis : Node.js ≥ 22.13 (SQLite natif via `node:sqlite`).
 
@@ -65,7 +70,28 @@ Les sources sont désactivables via `DISABLED_SOURCES=hellowork,hackernews`.
 
 Une offre non revue depuis 7 jours est signalée « peut-être retirée » (filtre « Masquer les offres disparues »). Ouvrir une fiche fait passer automatiquement une offre « Nouveau » en « Vu ».
 
-## Actualisation automatique
+## Hébergement gratuit : GitHub Actions + GitHub Pages (sans serveur)
+
+Le projet peut tourner sans aucun serveur : un workflow GitHub Actions (`.github/workflows/refresh.yml`) actualise les offres chaque matin (05:00 UTC) ou à la demande, publie les données JSON sur une branche `data`, construit le front en mode statique et le déploie sur GitHub Pages.
+
+Mise en place (une seule fois) :
+
+1. **Dépôt public** : sur un compte GitHub gratuit, GitHub Pages n'est disponible que pour les dépôts publics (Settings → General → Change visibility). Les offres agrégées sont alors publiques ; votre suivi, lui, reste dans votre navigateur ou dans un dépôt privé séparé (étape 4).
+2. **Pages** : Settings → Pages → Source : **GitHub Actions** (le workflow tente aussi de l'activer automatiquement).
+3. **Première actualisation** : onglet Actions → « Actualiser les offres et publier le site » → *Run workflow*. Le site est ensuite disponible sur `https://<utilisateur>.github.io/<dépôt>/`.
+4. **Bouton Actualiser et synchronisation du suivi** (optionnel) : créez un jeton personnel à granularité fine (Settings → Developer settings → Fine-grained tokens) avec, sur le dépôt du site, *Actions : Read and write* et, sur un dépôt **privé** dédié au suivi (par exemple `jobboard-suivi`), *Contents : Read and write*. Renseignez-le dans l'onglet Sources → Paramètres GitHub du site. Le jeton ne quitte jamais votre navigateur.
+5. **Clés API optionnelles** (France Travail, Adzuna, Jooble) : Settings → Secrets and variables → Actions → *Secrets*. Réglages (`LINKEDIN_PAGES`, `DETAIL_FETCH_LIMIT`, `DISABLED_SOURCES`, `RETENTION_DAYS`) : même écran, onglet *Variables*.
+
+Sans jeton, le bouton Actualiser du site indique comment lancer le workflow depuis GitHub ; l'actualisation planifiée du matin fonctionne dans tous les cas.
+
+Points d'attention :
+
+- Les runners GitHub ont des adresses IP de datacenter : LinkedIn et HelloWork peuvent bloquer davantage que depuis un poste personnel. L'onglet Sources du site montre l'état de chaque source.
+- GitHub désactive les workflows planifiés après 60 jours sans activité sur le dépôt ; un simple commit ou un lancement manuel les réactive.
+- Les offres non revues depuis `RETENTION_DAYS` jours (60 par défaut) sont purgées de l'export.
+- En local, le mode statique se teste avec `npm run refresh:static` (données dans `data/static/`) puis `npm run dev:static`.
+
+## Actualisation automatique (mode serveur)
 
 - `REFRESH_ON_START=true` : actualisation au démarrage du serveur.
 - `AUTO_REFRESH_MINUTES=120` : actualisation périodique.

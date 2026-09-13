@@ -14,7 +14,10 @@
     "build": "vite build --config client/vite.config.js",
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "refresh": "node --no-warnings=ExperimentalWarning server/cli-refresh.js",
-    "test": "node --test --no-warnings=ExperimentalWarning \"server/**/*.test.js\""
+    "test": "node --test --no-warnings=ExperimentalWarning \"server/**/*.test.js\"",
+    "refresh:static": "node --no-warnings=ExperimentalWarning server/cli-static.js",
+    "build:static": "VITE_STATIC=1 vite build --config client/vite.config.js",
+    "dev:static": "VITE_STATIC=1 vite --config client/vite.config.js"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

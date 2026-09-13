@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { api, CONTRACT_LABELS, formatDateTime } from '../api.js';
+import { api, IS_STATIC, CONTRACT_LABELS, formatDateTime } from '../api.js';
+import Settings from './Settings.jsx';
 
 const STATUS_ICON = { ok: '✅', partial: '⚠️', error: '❌', skipped: '⏸', running: '⏳', pending: '…' };
 
@@ -19,11 +20,12 @@ export default function SourcesPanel({ meta, refreshState, onRefresh, filters })
 
   return (
     <div className="sources-page">
+      {IS_STATIC ? <Settings /> : null}
       <section>
         <h2>Sources automatiques</h2>
         <p className="muted">
           Chaque source est interrogée indépendamment lors d'une actualisation. Une source en erreur n'empêche pas les autres. Les sources marquées « identifiants manquants »
-          s'activent en renseignant les clés dans le fichier <code>.env</code> (voir <code>.env.example</code>).
+          s'activent en renseignant les clés {IS_STATIC ? <>dans les <em>secrets</em> du dépôt GitHub (Settings → Secrets and variables → Actions)</> : <>dans le fichier <code>.env</code> (voir <code>.env.example</code>)</>}.
         </p>
         <table className="sources-table">
           <thead>
@@ -59,9 +61,11 @@ export default function SourcesPanel({ meta, refreshState, onRefresh, filters })
                     {(live?.error || live?.warning || (!live && s.lastError)) ? <div className="small warn">{live?.error || live?.warning || s.lastError}</div> : null}
                   </td>
                   <td>
-                    <button disabled={!s.enabled || refreshState?.running} onClick={() => onRefresh([s.id])}>
-                      Actualiser
-                    </button>
+                    {!IS_STATIC ? (
+                      <button disabled={!s.enabled || refreshState?.running} onClick={() => onRefresh([s.id])}>
+                        Actualiser
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               );
