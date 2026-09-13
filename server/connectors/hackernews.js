@@ -17,11 +17,14 @@ export default {
         if (!c.text) continue;
         const text = htmlToText(c.text);
         if (!/\b(france|paris|remote|europe|emea|lyon|nantes|bordeaux|lille|toulouse)\b/i.test(text)) continue;
+        // Posts de candidats (format « Who wants to be hired ») glissés dans le fil
+        if (/^\s*location\s*:|willing to relocate|seeking (?:work|freelance)|looking for (?:a )?(?:job|role|work)/i.test(text.slice(0, 200))) continue;
         const firstLine = text.split(/\s\|\s|\n/)[0].slice(0, 120);
         const parts = text.split('|').map((s) => s.trim());
+        if (parts.length < 2 || parts[0].length > 80) continue;
         jobs.push({
           sourceId: c.id,
-          title: parts[1] && parts[1].length < 90 ? `${parts[1]} — ${parts[0].slice(0, 60)}` : firstLine,
+          title: parts[1] && parts[1].length < 90 ? parts[1] : firstLine,
           company: parts[0].slice(0, 80),
           location: parts.slice(1, 5).find((p) => /remote|france|paris|europe|onsite|hybrid/i.test(p)) || '',
           remoteHint: /\bremote\b/i.test(text.slice(0, 300)) ? 'full' : undefined,

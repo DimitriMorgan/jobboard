@@ -1,6 +1,6 @@
 // Welcome to the Jungle : recherche via l'index Algolia public utilisé par le site,
 // puis détail (description) via l'API publique api.welcometothejungle.com.
-import { postJson, getJson, mapLimit } from '../http.js';
+import { postJson, getJson, getText, mapLimit, HttpError } from '../http.js';
 import { TECH_QUERIES } from '../normalize.js';
 
 const CONTRACT_MAP = { full_time: 'cdi', freelance: 'freelance', temporary: 'cdd', internship: 'stage', apprenticeship: 'alternance', part_time: 'autre', vie: 'autre' };
@@ -15,6 +15,38 @@ function wttjCompensation(hit) {
   if (/day|jour|daily/.test(period)) return { tjmMin: min, tjmMax: max, currency };
   const mult = /month|mois/.test(period) ? 12 : 1;
   return { salaryMin: min && min * mult, salaryMax: max && max * mult, currency };
+}
+
+const WTTJ_HEADERS = { origin: 'https://www.welcometothejungle.com', referer: 'https://www.welcometothejungle.com/fr/jobs' };
+
+/** Cherche des clés Algolia (32 hex) dans le HTML de WTTJ et ses bundles JS, à proximité du mot « algolia ». */
+async function discoverAlgoliaKeys(appId, log) {
+  const candidates = new Set();
+  const scan = (text) => {
+    const re = /algolia/gi;
+    let m;
+    while ((m = re.exec(text))) {
+      const window = text.slice(Math.max(0, m.index - 400), m.index + 400);
+      for (const k of window.match(/\b[a-f0-9]{32}\b/g) || []) candidates.add(k);
+    }
+  };
+  try {
+    const html = await getText('https://www.welcometothejungle.com/fr/jobs', { retries: 0 });
+    scan(html);
+    const scripts = [...html.matchAll(/<script[^>]+src="([^"]+\.js[^"]*)"/g)].map((m) => m[1]).filter((u) => /_next|static|chunks|app/i.test(u)).slice(0, 12);
+    await mapLimit(scripts, 4, async (src) => {
+      try {
+        const url = src.startsWith('http') ? src : `https://www.welcometothejungle.com${src}`;
+        const js = await getText(url, { retries: 0, timeoutMs: 15000 });
+        if (js.includes(appId) || /algolia/i.test(js)) scan(js);
+      } catch {
+        /* bundle inaccessible */
+      }
+    });
+  } catch (err) {
+    log?.(`Découverte de clé WTTJ impossible : ${err.message}`);
+  }
+  return [...candidates];
 }
 
 export default {
@@ -41,10 +73,25 @@ export default {
         }
       }
     }
-    const data = await postJson(endpoint, { requests }, {
-      headers: { 'x-algolia-application-id': appId, 'x-algolia-api-key': apiKey },
-      retries: 1,
-    });
+    const query = (key) => postJson(endpoint, { requests }, { headers: { 'x-algolia-application-id': appId, 'x-algolia-api-key': key, ...WTTJ_HEADERS }, retries: 0 });
+    let data;
+    try {
+      data = await query(apiKey);
+    } catch (err) {
+      if (!(err instanceof HttpError) || (err.status !== 403 && err.status !== 400)) throw err;
+      ctx.progress?.('Clé Algolia refusée, recherche d’une clé à jour dans le site WTTJ…');
+      const keys = (await discoverAlgoliaKeys(appId, ctx.progress)).filter((k) => k !== apiKey);
+      for (const key of keys) {
+        try {
+          data = await query(key);
+          ctx.progress?.(`Clé Algolia WTTJ trouvée automatiquement (${key.slice(0, 6)}…). Pensez à la reporter dans WTTJ_ALGOLIA_API_KEY.`);
+          break;
+        } catch {
+          /* clé suivante */
+        }
+      }
+      if (!data) throw new Error(`Algolia WTTJ : clé refusée (${err.status}) et aucune clé valide trouvée dans le site. Mettez à jour WTTJ_ALGOLIA_API_KEY (variable du dépôt ou .env).`);
+    }
     const jobs = new Map();
     (data.results || []).forEach((res, i) => {
       const tech = meta[i];

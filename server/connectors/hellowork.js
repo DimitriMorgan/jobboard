@@ -94,6 +94,46 @@ export default {
       ctx.progress?.(`HelloWork « ${kw} » : ${count} offres`);
       await sleep(800);
     }
+
+    // Détail des nouvelles offres : la page d'une offre embarque un JobPosting JSON-LD (description, lieu, contrat, salaire).
+    const limit = Number(process.env.DETAIL_FETCH_LIMIT ?? 40);
+    let fetched = 0;
+    for (const job of jobs.values()) {
+      if (fetched >= limit) break;
+      if (job.descriptionHtml || ctx.isKnown(job.sourceId)) continue;
+      try {
+        const html = await getText(job.url, { retries: 0 });
+        const $ = cheerio.load(html);
+        const jp = extractJsonLd($)[0];
+        if (jp) {
+          job.descriptionHtml = jp.description || '';
+          job.location = job.location || [jp.jobLocation?.address?.addressLocality, jp.jobLocation?.address?.postalCode].filter(Boolean).join(' ');
+          job.company = job.company || jp.hiringOrganization?.name || '';
+          job.publishedAt = job.publishedAt || jp.datePosted;
+          const et = String(Array.isArray(jp.employmentType) ? jp.employmentType.join(' ') : jp.employmentType || '');
+          const hint = /FULL_TIME/i.test(et) ? 'cdi' : /CONTRACTOR/i.test(et) ? 'freelance' : /TEMPORARY/i.test(et) ? 'cdd' : /INTERN/i.test(et) ? 'stage' : null;
+          if (hint && !job.contractHints.includes(hint)) job.contractHints.push(hint);
+          const sal = jp.baseSalary?.value;
+          if (sal && (sal.minValue || sal.maxValue || sal.value)) {
+            const unit = String(sal.unitText || '').toUpperCase();
+            const min = Number(sal.minValue || sal.value) || null;
+            const max = Number(sal.maxValue || sal.value) || null;
+            job.compensation = unit === 'DAY' ? { tjmMin: min, tjmMax: max, currency: '€' } : unit === 'MONTH' ? { salaryMin: min && min * 12, salaryMax: max && max * 12, currency: '€' } : unit === 'YEAR' ? { salaryMin: min, salaryMax: max, currency: '€' } : undefined;
+          }
+        } else {
+          job.descriptionHtml = $('[class*="description"], section, article').first().html() || '';
+        }
+        const contractText = $('body').text();
+        if (!job.contractHints.length) {
+          if (/\bCDI\b/.test(contractText)) job.contractHints.push('cdi');
+          else if (/free-?lance|ind[ée]pendant/i.test(contractText)) job.contractHints.push('freelance');
+        }
+        fetched++;
+        await sleep(600);
+      } catch {
+        /* détail indisponible */
+      }
+    }
     return [...jobs.values()];
   },
 };

@@ -6,9 +6,11 @@ import { TECH_QUERIES } from '../normalize.js';
 
 const SEARCH = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
 const DETAIL = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/';
-const JOB_TYPES = { F: 'cdi', C: 'freelance' }; // f_JT : F = temps plein, C = contrat/freelance
+// L'endpoint public ignore le filtre f_JT (type d'emploi) : le contrat est déduit du texte de l'offre
+// et de la rubrique « Type d'emploi » de la page de détail.
+const QUERY_SUFFIXES = ['développeur', 'freelance'];
 
-function parseList(html, tech, contract) {
+function parseList(html, tech) {
   const $ = cheerio.load(html);
   const out = [];
   $('li').each((_, li) => {
@@ -25,7 +27,7 @@ function parseList(html, tech, contract) {
       company: el.find('.base-search-card__subtitle, h4').first().text(),
       location: el.find('.job-search-card__location').first().text(),
       countryHint: 'FR',
-      contractHints: [contract],
+      contractHints: [],
       techHints: [tech],
       url: `https://www.linkedin.com/jobs/view/${id}/`,
       publishedAt: el.find('time[datetime]').attr('datetime'),
@@ -46,21 +48,21 @@ export default {
     let rateLimited = false;
     outer: for (const [tech, keywords] of Object.entries(TECH_QUERIES)) {
       const kw = keywords[0];
-      for (const [jt, contract] of Object.entries(JOB_TYPES)) {
+      for (const suffix of QUERY_SUFFIXES) {
+        let start = 0;
         for (let p = 0; p < pages; p++) {
-          const params = new URLSearchParams({ keywords: `${kw} développeur`, location: 'France', geoId: '105015875', f_TPR: 'r604800', f_JT: jt, start: String(p * 25) });
+          const params = new URLSearchParams({ keywords: `${kw} ${suffix}`, location: 'France', geoId: '105015875', f_TPR: 'r604800', start: String(start) });
           try {
             const html = await getText(`${SEARCH}?${params}`, { retries: 1, retryDelayMs: 4000 });
-            const items = parseList(html, tech, contract);
+            const items = parseList(html, tech);
             for (const it of items) {
               const prev = jobs.get(it.sourceId);
-              if (prev) {
-                prev.techHints.push(tech);
-                if (!prev.contractHints.includes(contract)) prev.contractHints.push(contract);
-              } else jobs.set(it.sourceId, it);
+              if (prev) prev.techHints.push(tech);
+              else jobs.set(it.sourceId, it);
             }
-            ctx.progress?.(`LinkedIn « ${kw} » ${contract} p${p + 1} : ${items.length} offres`);
-            if (items.length < 25) break;
+            ctx.progress?.(`LinkedIn « ${kw} ${suffix} » p${p + 1} : ${items.length} offres`);
+            if (items.length === 0) break;
+            start += items.length;
           } catch (err) {
             if (err instanceof HttpError && err.status === 429) {
               rateLimited = true;
@@ -89,8 +91,11 @@ export default {
             criteria[$(li).find('.description__job-criteria-subheader').text().trim()] = $(li).find('.description__job-criteria-text').text().trim();
           });
           const type = Object.entries(criteria).find(([k]) => /type|emploi/i.test(k))?.[1] || '';
-          if (/contrat|contract|freelance|indépendant/i.test(type)) job.contractHints.push('freelance');
-          if (/temps plein|full-time|full time/i.test(type)) job.contractHints.push('cdi');
+          if (/contrat|contract|freelance|indépendant|prestation/i.test(type)) job.contractHints.push('freelance');
+          else if (/temps plein|full-time|full time|cdi/i.test(type)) job.contractHints.push('cdi');
+          else if (/stage|intern/i.test(type)) job.contractHints.push('stage');
+          else if (/temporaire|temporary|cdd/i.test(type)) job.contractHints.push('cdd');
+          job.tags = Object.entries(criteria).map(([k, v]) => `${k} : ${v}`);
           fetched++;
           await sleep(1200);
         } catch (err) {
