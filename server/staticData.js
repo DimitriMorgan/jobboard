@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { rowToJob, STATUSES } from './db.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
-import { TECHS, CONTRACTS } from './normalize.js';
+import { TECHS, CONTRACTS, detectTechs } from './normalize.js';
 import { MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 
 export const JOBS_FILE = 'jobs.json';
@@ -70,7 +70,18 @@ export function importStatic(db, dir) {
   }
   if (payload.latestRun) db.importRun(payload.latestRun);
   for (const s of payload.sources || []) if (s.lastRunAt) db.importSource(s);
-  const rows = (payload.jobs || []).map((j) => ({ ...j, description: descriptions[j.id] || '' }));
+  // Revalidation : une offre sans description doit mentionner une techno dans son titre ou ses tags
+  // (sinon elle ne doit sa présence qu'au mot-clé de recherche, sans preuve dans son contenu).
+  const rows = [];
+  for (const j of payload.jobs || []) {
+    const description = descriptions[j.id] || '';
+    if (!description) {
+      const techs = detectTechs([j.title, (j.tags || []).join(' '), j.excerpt || ''].join('\n'));
+      if (!techs.length) continue;
+      j.techs = techs;
+    }
+    rows.push({ ...j, description });
+  }
   db.importJobs(rows);
   return rows.length;
 }

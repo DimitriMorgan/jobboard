@@ -22,6 +22,10 @@ test('export puis import statique conservent offres, run et sources', async () =
   assert.ok(payload.jobs.every((j) => j.isNew));
   assert.equal(payload.jobs.find((j) => j.id === 'fake:a').tjmMin, 500);
 
+  // Une offre sans description et sans techno dans le titre est écartée à l'import (revalidation)
+  const raw = JSON.parse(fs.readFileSync(path.join(dir, 'jobs.json'), 'utf8'));
+  raw.jobs.push({ ...raw.jobs[0], id: 'fake:z', sourceId: 'z', title: 'Equipier de commerce', tags: [], excerpt: '', techs: ['dotnet'] });
+  fs.writeFileSync(path.join(dir, 'jobs.json'), JSON.stringify(raw));
   const db2 = openDb(':memory:');
   assert.equal(importStatic(db2, dir), 2);
   assert.equal(db2.getJob('fake:a').description, '<p>React</p>');
