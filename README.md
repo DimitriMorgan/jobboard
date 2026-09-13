@@ -77,7 +77,7 @@ Le projet peut tourner sans aucun serveur : un workflow GitHub Actions (`.github
 Mise en place (une seule fois) :
 
 1. **Dépôt public** : sur un compte GitHub gratuit, GitHub Pages n'est disponible que pour les dépôts publics (Settings → General → Change visibility). Les offres agrégées sont alors publiques ; votre suivi, lui, reste dans votre navigateur ou dans un dépôt privé séparé (étape 4).
-2. **Pages** : Settings → Pages → Source : **GitHub Actions** (le workflow tente aussi de l'activer automatiquement).
+2. **Pages** : le workflow pousse le site construit sur la branche `gh-pages`. GitHub active en général Pages automatiquement pour cette branche ; sinon, Settings → Pages → Source : **Deploy from a branch** → `gh-pages` / `(root)`.
 3. **Première actualisation** : onglet Actions → « Actualiser les offres et publier le site » → *Run workflow*. Le site est ensuite disponible sur `https://<utilisateur>.github.io/<dépôt>/`.
 4. **Bouton Actualiser et synchronisation du suivi** (optionnel) : créez un jeton personnel à granularité fine (Settings → Developer settings → Fine-grained tokens) avec, sur le dépôt du site, *Actions : Read and write* et, sur un dépôt **privé** dédié au suivi (par exemple `jobboard-suivi`), *Contents : Read and write*. Renseignez-le dans l'onglet Sources → Paramètres GitHub du site. Le jeton ne quitte jamais votre navigateur.
 5. **Clés API optionnelles** (France Travail, Adzuna, Jooble) : Settings → Secrets and variables → Actions → *Secrets*. Réglages (`LINKEDIN_PAGES`, `DETAIL_FETCH_LIMIT`, `DISABLED_SOURCES`, `RETENTION_DAYS`) : même écran, onglet *Variables*.
