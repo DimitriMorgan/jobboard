@@ -1,0 +1,31 @@
+{
+  "name": "jobboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agrégateur d'offres d'emploi freelance / CDI (JavaScript, React, PHP, Node.js, .NET) avec suivi de candidatures",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch --no-warnings=ExperimentalWarning server/index.js",
+    "dev:client": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js",
+    "start": "node --no-warnings=ExperimentalWarning server/index.js",
+    "refresh": "node --no-warnings=ExperimentalWarning server/cli-refresh.js",
+    "test": "node --test --no-warnings=ExperimentalWarning \"server/**/*.test.js\""
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "express": "^4.21.2",
+    "sanitize-html": "^2.14.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.1.0"
+  }
+}
