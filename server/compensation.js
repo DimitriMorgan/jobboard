@@ -85,14 +85,16 @@ function extractSalary(text) {
  */
 export function extractCompensation({ salaryText = '', title = '', description = '', structured = {} } = {}) {
   const out = { tjmMin: null, tjmMax: null, salaryMin: null, salaryMax: null, currency: structured.currency || null };
-  const norm = (v) => (v == null || v === '' || Number.isNaN(Number(v)) || Number(v) <= 0 ? null : Number(v));
-  if (norm(structured.tjmMin) || norm(structured.tjmMax)) {
-    out.tjmMin = norm(structured.tjmMin) ?? norm(structured.tjmMax);
-    out.tjmMax = norm(structured.tjmMax) ?? norm(structured.tjmMin);
+  const norm = (v, ok) => (v == null || v === '' || Number.isNaN(Number(v)) || Number(v) <= 0 || !ok(Number(v)) ? null : Number(v));
+  const tjmOk = (n) => n >= 100 && n <= 3000;
+  const annualOk = (n) => n >= 10000 && n <= 600000;
+  if (norm(structured.tjmMin, tjmOk) || norm(structured.tjmMax, tjmOk)) {
+    out.tjmMin = norm(structured.tjmMin, tjmOk) ?? norm(structured.tjmMax, tjmOk);
+    out.tjmMax = norm(structured.tjmMax, tjmOk) ?? norm(structured.tjmMin, tjmOk);
   }
-  if (norm(structured.salaryMin) || norm(structured.salaryMax)) {
-    out.salaryMin = norm(structured.salaryMin) ?? norm(structured.salaryMax);
-    out.salaryMax = norm(structured.salaryMax) ?? norm(structured.salaryMin);
+  if (norm(structured.salaryMin, annualOk) || norm(structured.salaryMax, annualOk)) {
+    out.salaryMin = norm(structured.salaryMin, annualOk) ?? norm(structured.salaryMax, annualOk);
+    out.salaryMax = norm(structured.salaryMax, annualOk) ?? norm(structured.salaryMin, annualOk);
   }
   const sources = [salaryText, title, description.slice(0, 4000)].filter(Boolean);
   for (const text of sources) {

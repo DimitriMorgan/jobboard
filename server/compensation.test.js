@@ -33,3 +33,9 @@ test('structuré prioritaire et mixte', () => {
   assert.equal(formatAnnual(45000, 55000), '45 k - 55 k€/an');
   assert.equal(formatAnnual(50000, 50000, '$'), '50 k$/an');
 });
+
+test('valeurs structurées aberrantes ignorées', () => {
+  const r = extractCompensation({ structured: { salaryMin: 600, salaryMax: 700 }, description: 'Salaire 32-36k€' });
+  assert.deepEqual([r.salaryMin, r.salaryMax], [32000, 36000]);
+  assert.equal(extractCompensation({ structured: { tjmMin: 5 } }).tjmMin, null);
+});

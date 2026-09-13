@@ -1,7 +1,26 @@
 // Welcome to the Jungle : recherche via l'index Algolia public utilisé par le site,
 // puis détail (description) via l'API publique api.welcometothejungle.com.
 import { postJson, getJson, getText, mapLimit, HttpError } from '../http.js';
-import { TECH_QUERIES } from '../normalize.js';
+import { TECHS } from '../normalize.js';
+
+// Requêtes adaptées à Algolia (tokenisation par mots : « c# » deviendrait « c » et matcherait n'importe quoi).
+const WTTJ_QUERIES = {
+  javascript: ['javascript', 'typescript'],
+  react: ['react', 'reactjs'],
+  php: ['php', 'symfony', 'laravel'],
+  nodejs: ['nodejs', 'node.js', 'nestjs'],
+  dotnet: ['dotnet', 'asp.net', '.net développeur', 'c# .net'],
+};
+
+/** Vrai si Algolia signale que tous les mots de la requête ont été trouvés dans un attribut de l'offre. */
+function highlightMatches(hit) {
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return false;
+    if (node.matchLevel === 'full') return true;
+    return Object.values(node).some(walk);
+  };
+  return walk(hit._highlightResult);
+}
 
 const CONTRACT_MAP = { full_time: 'cdi', freelance: 'freelance', temporary: 'cdd', internship: 'stage', apprenticeship: 'alternance', part_time: 'autre', vie: 'autre' };
 const REMOTE_MAP = { fulltime: 'full', partial: 'partial', punctual: 'partial', no: 'none' };
@@ -62,12 +81,12 @@ export default {
 
     const requests = [];
     const meta = [];
-    for (const [tech, keywords] of Object.entries(TECH_QUERIES)) {
+    for (const [tech, keywords] of Object.entries(WTTJ_QUERIES)) {
       for (const kw of keywords) {
         for (const filters of ['offices.country_code:FR', 'remote:fulltime']) {
           requests.push({
             indexName: index,
-            params: new URLSearchParams({ query: kw, hitsPerPage: '100', page: '0', filters, attributesToHighlight: '[]' }).toString(),
+            params: new URLSearchParams({ query: kw, hitsPerPage: '100', page: '0', filters, typoTolerance: 'false', attributesToHighlight: '*' }).toString(),
           });
           meta.push(tech);
         }
@@ -98,9 +117,13 @@ export default {
       for (const hit of res.hits || []) {
         const id = hit.objectID || hit.reference || hit.slug;
         if (!id) continue;
+        // On ne garde que les offres dont le titre mentionne la techno, ou dont Algolia confirme la correspondance complète.
+        const techRe = TECHS.find((t) => t.id === tech).re;
+        const titleMatch = techRe.test(`${hit.name || ''} ${hit.profession?.name || ''}`);
+        if (!titleMatch && !highlightMatches(hit)) continue;
         const prev = jobs.get(String(id));
         if (prev) {
-          prev.techHints.push(tech);
+          if (!prev.techHints.includes(tech)) prev.techHints.push(tech);
           continue;
         }
         const orgSlug = hit.organization?.slug;
