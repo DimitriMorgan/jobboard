@@ -80,6 +80,14 @@ function extractSalary(text) {
   return null;
 }
 
+/** « 45 000 €/an - 55 000 €/an » → « 45 000 - 55 000 €/an » (fourchettes où l'unité est répétée). */
+export function unifyRanges(text) {
+  return String(text || '').replace(
+    /(\d)\s*(k\s*)?(?:€|euros?|\$|£)\s*(?:(?:\/|par|per)\s*(?:an|ann[ée]e|mois|jour|j|year|month|day)\b)?\s*(-|–|—|à|to)\s*(?=[€$£]?\s*\d)/gi,
+    (m, d, k, sep) => `${d}${k ? 'k' : ''} ${sep} `,
+  );
+}
+
 /**
  * @param {{salaryText?: string, title?: string, description?: string, structured?: {tjmMin,tjmMax,salaryMin,salaryMax,currency}}} p
  */
@@ -96,7 +104,7 @@ export function extractCompensation({ salaryText = '', title = '', description =
     out.salaryMin = norm(structured.salaryMin, annualOk) ?? norm(structured.salaryMax, annualOk);
     out.salaryMax = norm(structured.salaryMax, annualOk) ?? norm(structured.salaryMin, annualOk);
   }
-  const sources = [salaryText, title, description.slice(0, 4000)].filter(Boolean);
+  const sources = [salaryText, title, description.slice(0, 4000)].filter(Boolean).map(unifyRanges);
   for (const text of sources) {
     if (out.tjmMin == null) {
       const t = extractTjm(text);

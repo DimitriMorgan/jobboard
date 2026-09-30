@@ -44,8 +44,9 @@ jobs:
         run: npm run refresh:static
         env:
           RETENTION_DAYS: ${{ vars.RETENTION_DAYS || 60 }}
-          LINKEDIN_PAGES: ${{ vars.LINKEDIN_PAGES || 1 }}
-          DETAIL_FETCH_LIMIT: ${{ vars.DETAIL_FETCH_LIMIT || 40 }}
+          LINKEDIN_MAX_REQUESTS: ${{ vars.LINKEDIN_MAX_REQUESTS || 500 }}
+          LINKEDIN_DETAIL_LIMIT: ${{ vars.LINKEDIN_DETAIL_LIMIT || 250 }}
+          DETAIL_FETCH_LIMIT: ${{ vars.DETAIL_FETCH_LIMIT || 60 }}
           DISABLED_SOURCES: ${{ vars.DISABLED_SOURCES }}
           FRANCE_TRAVAIL_CLIENT_ID: ${{ secrets.FRANCE_TRAVAIL_CLIENT_ID }}
           FRANCE_TRAVAIL_CLIENT_SECRET: ${{ secrets.FRANCE_TRAVAIL_CLIENT_SECRET }}

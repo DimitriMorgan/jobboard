@@ -44,6 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs(fingerprint);
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   last_run_at TEXT,
+  last_success_at TEXT,
   last_status TEXT,
   last_error TEXT,
   last_count INTEGER DEFAULT 0,
@@ -68,7 +69,8 @@ const parse = (s, fallback) => {
   }
 };
 
-export function rowToJob(row, latestRunId) {
+/** @param newSince date ISO de début de la dernière actualisation complète : une offre découverte depuis est « nouvelle ». */
+export function rowToJob(row, newSince) {
   if (!row) return null;
   const lastSeen = new Date(row.last_seen_at).getTime();
   return {
@@ -97,12 +99,65 @@ export function rowToJob(row, latestRunId) {
     fingerprint: row.fingerprint,
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,
-    isNew: latestRunId != null && row.first_run_id === latestRunId,
+    isNew: newSince != null && row.first_seen_at >= newSince,
     stillListed: Date.now() - lastSeen < 7 * 86400e3,
     status: row.status,
     notes: row.notes,
     favorite: !!row.favorite,
     statusUpdatedAt: row.status_updated_at,
+  };
+}
+
+const INFORMED = 200; // longueur de description à partir de laquelle une fiche est considérée complète
+const specific = (list) => list.filter((c) => c !== 'autre');
+
+/**
+ * Fusionne une offre revue lors d'une actualisation avec la version en base.
+ * Une offre revue sans sa fiche détaillée (liste de résultats seule) ne doit pas écraser le contrat,
+ * les technos, les critères ou la rémunération obtenus précédemment depuis la fiche complète.
+ */
+export function mergeJob(row, j) {
+  const oldContracts = parse(row.contracts, []);
+  const oldTechs = parse(row.techs, []);
+  const oldTags = parse(row.tags, []);
+  const oldDesc = row.description || '';
+  const newDesc = j.description || '';
+  const oldInformed = oldDesc.length >= INFORMED;
+  const newInformed = newDesc.length >= INFORMED;
+  const richer = newDesc.length >= oldDesc.length;
+
+  let contracts;
+  if (!specific(j.contracts).length) contracts = oldContracts.length ? oldContracts : j.contracts;
+  else if (richer || !specific(oldContracts).length) contracts = j.contracts;
+  else contracts = [...new Set([...specific(oldContracts), ...specific(j.contracts)])];
+
+  let techs;
+  if (newInformed || (!oldInformed && richer)) techs = j.techs;
+  else if (oldInformed) techs = oldTechs.length ? oldTechs : j.techs;
+  else techs = [...new Set([...oldTechs, ...j.techs])];
+
+  const placeholder = 'Entreprise non précisée';
+  return {
+    title: j.title || row.title,
+    company: j.company && (j.company !== placeholder || !row.company) ? j.company : row.company,
+    location: j.location || row.location,
+    country: j.location ? j.country : row.country,
+    remote: j.remote ?? row.remote,
+    contracts,
+    techs,
+    salary: j.salary || row.salary || '',
+    tjmMin: j.tjmMin ?? row.tjm_min,
+    tjmMax: j.tjmMax ?? row.tjm_max,
+    salaryMin: j.salaryMin ?? row.salary_min,
+    salaryMax: j.salaryMax ?? row.salary_max,
+    currency: j.currency ?? row.currency,
+    url: j.url || row.url,
+    applyUrl: j.applyUrl || row.apply_url,
+    publishedAt: j.publishedAt || row.published_at,
+    description: richer ? newDesc : oldDesc,
+    excerpt: (j.excerpt || '').length >= (row.excerpt || '').length ? j.excerpt : row.excerpt,
+    tags: j.tags.length >= oldTags.length ? j.tags : oldTags,
+    fingerprint: j.fingerprint || row.fingerprint,
   };
 }
 
@@ -115,6 +170,10 @@ export function openDb(dbPath) {
   for (const [col, type] of [['tjm_min', 'REAL'], ['tjm_max', 'REAL'], ['salary_min', 'REAL'], ['salary_max', 'REAL'], ['currency', 'TEXT']]) {
     if (!cols.has(col)) db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${type}`);
   }
+  const srcCols = new Set(db.prepare('PRAGMA table_info(sources)').all().map((c) => c.name));
+  if (!srcCols.has('last_success_at')) db.exec('ALTER TABLE sources ADD COLUMN last_success_at TEXT');
+  const runCols = new Set(db.prepare('PRAGMA table_info(runs)').all().map((c) => c.name));
+  if (!runCols.has('partial')) db.exec('ALTER TABLE runs ADD COLUMN partial INTEGER NOT NULL DEFAULT 0');
 
   const stmts = {
     getJob: db.prepare('SELECT * FROM jobs WHERE id = ?'),
@@ -122,24 +181,25 @@ export function openDb(dbPath) {
       published_at, description, excerpt, tags, fingerprint, first_seen_at, last_seen_at, first_run_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
     updateJob: db.prepare(`UPDATE jobs SET title = ?, company = ?, location = ?, country = ?, remote = ?, contracts = ?, techs = ?, salary = ?,
-      tjm_min = COALESCE(?, tjm_min), tjm_max = COALESCE(?, tjm_max), salary_min = COALESCE(?, salary_min), salary_max = COALESCE(?, salary_max), currency = COALESCE(?, currency), url = ?, apply_url = ?,
-      published_at = COALESCE(?, published_at), description = CASE WHEN length(?) > length(COALESCE(description, '')) THEN ? ELSE description END,
-      excerpt = CASE WHEN length(?) > length(COALESCE(excerpt, '')) THEN ? ELSE excerpt END, tags = ?, fingerprint = ?, last_seen_at = ? WHERE id = ?`),
+      tjm_min = ?, tjm_max = ?, salary_min = ?, salary_max = ?, currency = ?, url = ?, apply_url = ?, published_at = ?, description = ?, excerpt = ?,
+      tags = ?, fingerprint = ?, last_seen_at = ? WHERE id = ?`),
     sourceIds: db.prepare('SELECT source_id FROM jobs WHERE source = ?'),
-    upsertSource: db.prepare(`INSERT INTO sources (id, last_run_at, last_status, last_error, last_count, last_new, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET last_run_at = excluded.last_run_at, last_status = excluded.last_status, last_error = excluded.last_error,
+    upsertSource: db.prepare(`INSERT INTO sources (id, last_run_at, last_success_at, last_status, last_error, last_count, last_new, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET last_run_at = excluded.last_run_at, last_success_at = COALESCE(excluded.last_success_at, sources.last_success_at),
+      last_status = excluded.last_status, last_error = excluded.last_error,
       last_count = excluded.last_count, last_new = excluded.last_new, duration_ms = excluded.duration_ms`),
     allSources: db.prepare('SELECT * FROM sources'),
     countBySource: db.prepare('SELECT source, COUNT(*) AS n FROM jobs GROUP BY source'),
-    insertRun: db.prepare('INSERT INTO runs (started_at) VALUES (?)'),
+    insertRun: db.prepare('INSERT INTO runs (started_at, partial) VALUES (?, ?)'),
     finishRun: db.prepare('UPDATE runs SET finished_at = ?, total_seen = ?, total_new = ?, summary = ? WHERE id = ?'),
-    latestRun: db.prepare('SELECT * FROM runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1'),
+    // Dernière actualisation complète (les actualisations partielles — ajout d'un post… — ne réinitialisent pas « Nouveau »).
+    latestRun: db.prepare('SELECT * FROM runs WHERE finished_at IS NOT NULL AND partial = 0 ORDER BY id DESC LIMIT 1'),
     updateTracking: db.prepare('UPDATE jobs SET status = ?, notes = ?, favorite = ?, status_updated_at = ? WHERE id = ?'),
     duplicates: db.prepare('SELECT id, source, url FROM jobs WHERE fingerprint = ? AND id != ?'),
     deleteJob: db.prepare('DELETE FROM jobs WHERE id = ?'),
   };
 
-  const latestRunId = () => stmts.latestRun.get()?.id ?? null;
+  const newSince = () => stmts.latestRun.get()?.started_at ?? null;
 
   return {
     raw: db,
@@ -147,9 +207,17 @@ export function openDb(dbPath) {
     knownSourceIds(source) {
       return new Set(stmts.sourceIds.all(source).map((r) => r.source_id));
     },
-    /** Identifiants déjà en base pour une source, avec la longueur de description connue. */
-    knownDescriptions(source) {
-      return new Map(db.prepare('SELECT source_id, length(COALESCE(description, \'\')) AS len FROM jobs WHERE source = ?').all(source).map((r) => [r.source_id, r.len]));
+    /** Offres déjà en base pour une source : infos utiles aux connecteurs pour décider d'aller chercher le détail. */
+    knownJobs(source) {
+      const rows = db
+        .prepare(`SELECT source_id, title, company, location, url, contracts, tags, last_seen_at, length(COALESCE(description, '')) AS desc_len FROM jobs WHERE source = ?`)
+        .all(source);
+      return new Map(
+        rows.map((r) => [
+          r.source_id,
+          { sourceId: r.source_id, title: r.title, company: r.company, location: r.location, url: r.url, contracts: parse(r.contracts, []), tags: parse(r.tags, []), lastSeenAt: r.last_seen_at, descLen: r.desc_len },
+        ]),
+      );
     },
 
     /** Insère ou met à jour une liste d'offres normalisées. Renvoie {inserted, updated}. */
@@ -162,10 +230,11 @@ export function openDb(dbPath) {
         for (const j of jobs) {
           const existing = stmts.getJob.get(j.id);
           if (existing) {
+            const m = mergeJob(existing, j);
             stmts.updateJob.run(
-              j.title, j.company, j.location, j.country, j.remote, JSON.stringify(j.contracts), JSON.stringify(j.techs), j.salary,
-              j.tjmMin, j.tjmMax, j.salaryMin, j.salaryMax, j.currency, j.url, j.applyUrl,
-              j.publishedAt, j.description, j.description, j.excerpt, j.excerpt, JSON.stringify(j.tags), j.fingerprint, now, j.id,
+              m.title, m.company, m.location, m.country, m.remote, JSON.stringify(m.contracts), JSON.stringify(m.techs), m.salary,
+              m.tjmMin, m.tjmMax, m.salaryMin, m.salaryMax, m.currency, m.url, m.applyUrl, m.publishedAt, m.description, m.excerpt,
+              JSON.stringify(m.tags), m.fingerprint, j.refreshOnly ? existing.last_seen_at : now, j.id,
             );
             updated++;
           } else {
@@ -184,11 +253,12 @@ export function openDb(dbPath) {
       return { inserted, updated };
     },
 
-    startRun() {
+    startRun({ partial = false } = {}) {
       const startedAt = new Date().toISOString();
-      const res = stmts.insertRun.run(startedAt);
+      const res = stmts.insertRun.run(startedAt, partial ? 1 : 0);
       return { id: Number(res.lastInsertRowid), startedAt };
     },
+    newSince,
     finishRun(id, { totalSeen, totalNew, summary }) {
       stmts.finishRun.run(new Date().toISOString(), totalSeen, totalNew, JSON.stringify(summary), id);
     },
@@ -197,8 +267,13 @@ export function openDb(dbPath) {
       return r ? { ...r, summary: parse(r.summary, null) } : null;
     },
 
-    recordSource(id, { status, error, count, newCount, durationMs }) {
-      stmts.upsertSource.run(id, new Date().toISOString(), status, error || null, count || 0, newCount || 0, durationMs || 0);
+    recordSource(id, { status, error, count, newCount, durationMs, startedAt }) {
+      const now = new Date().toISOString();
+      const success = status === 'ok' || status === 'partial' ? startedAt || now : null;
+      stmts.upsertSource.run(id, now, success, status, error || null, count || 0, newCount || 0, durationMs || 0);
+    },
+    sourceInfo(id) {
+      return db.prepare('SELECT * FROM sources WHERE id = ?').get(id) || null;
     },
     sourceStats() {
       const counts = Object.fromEntries(stmts.countBySource.all().map((r) => [r.source, r.n]));
@@ -207,7 +282,7 @@ export function openDb(dbPath) {
     },
 
     getJob(id) {
-      const job = rowToJob(stmts.getJob.get(id), latestRunId());
+      const job = rowToJob(stmts.getJob.get(id), newSince());
       if (!job) return null;
       job.duplicates = stmts.duplicates.all(job.fingerprint, job.id);
       return job;
@@ -245,19 +320,49 @@ export function openDb(dbPath) {
       }
     },
     importRun(run) {
-      db.prepare('INSERT OR REPLACE INTO runs (id, started_at, finished_at, total_seen, total_new, summary) VALUES (?, ?, ?, ?, ?, ?)').run(
+      db.prepare('INSERT OR REPLACE INTO runs (id, started_at, finished_at, total_seen, total_new, summary, partial) VALUES (?, ?, ?, ?, ?, ?, 0)').run(
         run.id, run.startedAt, run.finishedAt, run.totalSeen || 0, run.totalNew || 0, null,
       );
     },
     importSource(s) {
-      db.prepare(`INSERT OR REPLACE INTO sources (id, last_run_at, last_status, last_error, last_count, last_new, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-        s.id, s.lastRunAt, s.lastStatus, s.lastError, s.lastCount || 0, s.lastNew || 0, s.durationMs || 0,
+      db.prepare(`INSERT OR REPLACE INTO sources (id, last_run_at, last_success_at, last_status, last_error, last_count, last_new, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        s.id, s.lastRunAt ?? null, s.lastSuccessAt ?? (s.lastStatus === 'ok' || s.lastStatus === 'partial' ? s.lastRunAt ?? null : null), s.lastStatus ?? null, s.lastError ?? null,
+        s.lastCount || 0, s.lastNew || 0, s.durationMs || 0,
       );
     },
     /** Supprime les offres non revues depuis `days` jours (sauf celles en cours de suivi). */
     purgeOlderThan(days) {
       const limit = new Date(Date.now() - days * 86400e3).toISOString();
       return db.prepare(`DELETE FROM jobs WHERE last_seen_at < ? AND status IN ('nouveau', 'vu', 'ignore')`).run(limit).changes;
+    },
+
+    /**
+     * Complète les offres dont le contrat, le télétravail ou la rémunération sont inconnus alors que la description
+     * en base permet de les déduire (répare les offres abîmées par l'ancienne mise à jour destructive).
+     */
+    repairIncomplete(repairFn) {
+      const rows = db
+        .prepare(
+          `SELECT * FROM jobs WHERE length(COALESCE(description, '')) > 40 AND (contracts = '["autre"]' OR remote IS NULL OR (tjm_min IS NULL AND salary_min IS NULL))`,
+        )
+        .all();
+      const upd = db.prepare('UPDATE jobs SET contracts = ?, remote = ?, tjm_min = ?, tjm_max = ?, salary_min = ?, salary_max = ?, currency = ?, salary = ? WHERE id = ?');
+      let repaired = 0;
+      db.exec('BEGIN');
+      try {
+        for (const row of rows) {
+          const job = rowToJob(row, null);
+          const fixed = repairFn(job);
+          if (!fixed) continue;
+          upd.run(JSON.stringify(fixed.contracts), fixed.remote, fixed.tjmMin, fixed.tjmMax, fixed.salaryMin, fixed.salaryMax, fixed.currency, fixed.salary, row.id);
+          repaired++;
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+      return repaired;
     },
 
     deleteJob(id) {
@@ -300,10 +405,10 @@ export function openDb(dbPath) {
         where.push(`COALESCE(published_at, first_seen_at) >= ?`);
         params.push(new Date(Date.now() - Number(filters.sinceDays) * 86400e3).toISOString());
       }
-      const runId = latestRunId();
+      const since = newSince();
       if (filters.onlyNew) {
-        where.push(`first_run_id = ?`);
-        params.push(runId ?? -1);
+        where.push(`first_seen_at >= ?`);
+        params.push(since ?? '9999');
       }
       if (filters.favorite) where.push('favorite = 1');
       if (Number(filters.tjmMin) > 0) {
@@ -330,13 +435,13 @@ export function openDb(dbPath) {
         fingerprint, first_seen_at, last_seen_at, first_run_id, status, notes, favorite, status_updated_at FROM jobs
         ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${order} LIMIT ?`;
       params.push(Number(filters.limit) || 1000);
-      return db.prepare(sql).all(...params).map((r) => rowToJob(r, runId));
+      return db.prepare(sql).all(...params).map((r) => rowToJob(r, since));
     },
 
     stats() {
-      const runId = latestRunId();
+      const since = newSince();
       const total = db.prepare('SELECT COUNT(*) AS n FROM jobs').get().n;
-      const newCount = runId == null ? 0 : db.prepare('SELECT COUNT(*) AS n FROM jobs WHERE first_run_id = ?').get(runId).n;
+      const newCount = since == null ? 0 : db.prepare('SELECT COUNT(*) AS n FROM jobs WHERE first_seen_at >= ?').get(since).n;
       const byStatus = Object.fromEntries(db.prepare('SELECT status, COUNT(*) AS n FROM jobs GROUP BY status').all().map((r) => [r.status, r.n]));
       const byTech = {};
       for (const r of db.prepare('SELECT techs FROM jobs').all()) for (const t of parse(r.techs, [])) byTech[t] = (byTech[t] || 0) + 1;

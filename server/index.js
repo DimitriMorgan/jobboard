@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb, STATUSES } from './db.js';
 import { createRefresher } from './refresh.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
-import { TECHS, CONTRACTS } from './normalize.js';
+import { TECHS, CONTRACTS, repairJob } from './normalize.js';
 import { manualLinks, MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 import { loadEnv } from './env.js';
 
@@ -16,6 +16,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = path.resolve(process.env.DB_PATH || path.join(__dirname, '..', 'data', 'jobboard.sqlite'));
 
 const db = openDb(DB_PATH);
+const repairedAtStart = db.repairIncomplete(repairJob);
+if (repairedAtStart) console.log(`${repairedAtStart} offres complétées depuis leur description.`);
 const refresher = createRefresher(db, { log: console });
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -75,8 +77,9 @@ app.delete('/api/jobs/:id', (req, res) => {
 
 app.post('/api/refresh', (req, res) => {
   const only = list(req.body?.only || req.query.only);
+  const manualUrls = Array.isArray(req.body?.manualUrls) ? req.body.manualUrls.map(String) : list(req.body?.manualUrls);
   if (refresher.status().running) return res.status(409).json({ error: 'Une actualisation est déjà en cours', status: refresher.status() });
-  refresher.refresh({ only }).catch((err) => console.error('Actualisation échouée', err));
+  refresher.refresh({ only, manualUrls }).catch((err) => console.error('Actualisation échouée', err));
   res.status(202).json(refresher.status());
 });
 

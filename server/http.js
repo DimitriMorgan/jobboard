@@ -1,7 +1,7 @@
 // Petits utilitaires HTTP au-dessus de fetch (Node >= 18) : timeout, retries, User-Agent réaliste.
 
 export const BROWSER_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
 export class HttpError extends Error {
   constructor(status, url, body) {

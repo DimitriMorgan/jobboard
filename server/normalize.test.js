@@ -56,3 +56,16 @@ test('offre hors technos ignorée, sauf indice de recherche sans description', (
   assert.deepEqual(normalizeJob('t', { sourceId: 1, title: 'Dev Fullstack', url: 'u', techHints: ['react'] }).techs, ['react']);
   assert.equal(sanitize('<img src=x onerror=alert(1)>ok'), 'ok');
 });
+
+test('contrat cité explicitement dans la description', () => {
+  const c = (description, title = 'Développeur React') => inferContracts({ title, description });
+  assert.deepEqual(c('Bla bla. Poste en CDI à 39 heures, avec un jour de RTT.'), ['cdi']);
+  assert.deepEqual(c('Contrat : Freelance à temps partiel ou temps plein. Environnement : React'), ['freelance']);
+  assert.deepEqual(c('Type de contrat : Freelance / Indépendant, Temps complet Rémunération : 300'), ['freelance']);
+  assert.deepEqual(c('- Lieu : Paris - Contrat : CDI / Freelance - Salaire fixe'), ['freelance', 'cdi']);
+  assert.deepEqual(c('Localisation : Bordeaux (33) Télétravail partiel possible CDI à temps plein PROFIL'), ['cdi']);
+  assert.deepEqual(c('Démarrage souhaité : Octobre Durée de la mission : 3 mois Renouvelable'), ['freelance']);
+  assert.deepEqual(c('Employment type: Full-time. We are a remote company.'), ['cdi']);
+  assert.deepEqual(c('Nous cherchons un profil passionné pour rejoindre notre équipe produit.'), ['autre']);
+  assert.deepEqual(inferContracts({ hints: ['autre'], title: 'Dev', description: 'Poste en CDI' }), ['cdi']);
+});

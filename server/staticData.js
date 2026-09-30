@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { rowToJob, STATUSES } from './db.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
-import { TECHS, CONTRACTS, detectTechs } from './normalize.js';
+import { TECHS, CONTRACTS } from './normalize.js';
 import { MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 
 export const JOBS_FILE = 'jobs.json';
@@ -13,12 +13,12 @@ export const DESCRIPTIONS_FILE = 'descriptions.json';
 export function exportStatic(db, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const latestRun = db.latestRun();
-  const runId = latestRun?.id ?? null;
+  const since = db.newSince();
   const rows = db.raw.prepare('SELECT * FROM jobs ORDER BY COALESCE(published_at, first_seen_at) DESC').all();
   const jobs = [];
   const descriptions = {};
   for (const row of rows) {
-    const job = rowToJob(row, runId);
+    const job = rowToJob(row, since);
     const { description, status, notes, favorite, statusUpdatedAt, ...rest } = job;
     jobs.push({ ...rest, firstRunId: row.first_run_id });
     if (description) descriptions[job.id] = description;
@@ -28,7 +28,7 @@ export function exportStatic(db, dir) {
     const r = srcRows[c.id] || {};
     return {
       id: c.id, name: c.name, site: c.site, description: c.description, ...connectorAvailability(c),
-      total: counts[c.id] || 0, lastRunAt: r.last_run_at || null, lastStatus: r.last_status || null, lastError: r.last_error || null,
+      total: counts[c.id] || 0, lastRunAt: r.last_run_at || null, lastSuccessAt: r.last_success_at || null, lastStatus: r.last_status || null, lastError: r.last_error || null,
       lastCount: r.last_count || 0, lastNew: r.last_new || 0, durationMs: r.duration_ms || 0,
     };
   });
@@ -70,18 +70,7 @@ export function importStatic(db, dir) {
   }
   if (payload.latestRun) db.importRun(payload.latestRun);
   for (const s of payload.sources || []) if (s.lastRunAt) db.importSource(s);
-  // Revalidation : une offre sans description doit mentionner une techno dans son titre ou ses tags
-  // (sinon elle ne doit sa présence qu'au mot-clé de recherche, sans preuve dans son contenu).
-  const rows = [];
-  for (const j of payload.jobs || []) {
-    const description = descriptions[j.id] || '';
-    if (!description) {
-      const techs = detectTechs([j.title, (j.tags || []).join(' '), j.excerpt || ''].join('\n'));
-      if (!techs.length) continue;
-      j.techs = techs;
-    }
-    rows.push({ ...j, description });
-  }
+  const rows = (payload.jobs || []).map((j) => ({ ...j, description: descriptions[j.id] || '' }));
   db.importJobs(rows);
   return rows.length;
 }

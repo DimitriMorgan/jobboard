@@ -47,3 +47,18 @@ test('actualisation : isolation des erreurs, insertion, suivi et filtres', async
   assert.equal(db.stats().total, 2);
   db.close();
 });
+
+test('actualisation partielle : les offres ajoutées sont « nouvelles » sans effacer celles du jour', async () => {
+  const db = openDb(':memory:');
+  const job = (id, title) => ({ sourceId: id, title, company: 'X', location: 'Paris', url: `https://x/${id}`, descriptionText: 'React' });
+  await createRefresher(db, { log: {}, connectors: [fake('a', [job('1', 'Dev React')])] }).refresh();
+  assert.equal(db.listJobs({ onlyNew: true }).length, 1);
+  const tick = () => new Promise((r) => setTimeout(r, 5));
+  await tick();
+  await createRefresher(db, { log: {}, connectors: [fake('b', [job('2', 'Dev React 2')])] }).refresh({ only: ['b'] });
+  assert.equal(db.listJobs({ onlyNew: true }).length, 2);
+  await tick();
+  await createRefresher(db, { log: {}, connectors: [fake('a', [job('1', 'Dev React')])] }).refresh();
+  assert.equal(db.listJobs({ onlyNew: true }).length, 0);
+  db.close();
+});

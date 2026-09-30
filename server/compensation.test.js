@@ -39,3 +39,12 @@ test('valeurs structurées aberrantes ignorées', () => {
   assert.deepEqual([r.salaryMin, r.salaryMax], [32000, 36000]);
   assert.equal(extractCompensation({ structured: { tjmMin: 5 } }).tjmMin, null);
 });
+
+test('fourchettes avec unité répétée', () => {
+  const r = extractCompensation({ salaryText: '45 000 €/an - 55 000 €/an' });
+  assert.deepEqual([r.salaryMin, r.salaryMax], [45000, 55000]);
+  const t = extractCompensation({ description: 'TJM : 550 €/jour - 650 €/jour' });
+  assert.deepEqual([t.tjmMin, t.tjmMax], [550, 650]);
+  const k = extractCompensation({ description: 'Salaire 45k€ - 55k€ brut' });
+  assert.deepEqual([k.salaryMin, k.salaryMax], [45000, 55000]);
+});

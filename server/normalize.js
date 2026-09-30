@@ -35,6 +35,38 @@ const CONTRACT_PATTERNS_DESC = CONTRACT_PATTERNS.filter(([id]) => id === 'freela
   ([id, re]) => [id, id === 'freelance' ? /\bfree-?lances?\b|\bfreelancers?\b|\btjm\b|\bportage salarial\b|\bcontractor\b|\bday rate\b/i : re],
 );
 
+// Jetons reconnus dans une mention explicite du contrat (« Type de contrat : CDI / Freelance »).
+const CONTRACT_TOKENS = [
+  ['freelance', /free-?lance|ind[ée]pendant|portage|auto-?entrepreneur|contractor|prestation/i],
+  ['cdi', /\bcdi\b|dur[ée]e ind[ée]termin[ée]e|\bpermanent\b/i],
+  ['cdd', /\bcdd\b|dur[ée]e d[ée]termin[ée]e|fixed[- ]term/i],
+  ['interim', /int[ée]rim/i],
+  ['alternance', /alternance|apprentissage|apprenticeship|professionnalisation/i],
+  ['stage', /\bstage\b|internship/i],
+];
+const FULL_TIME_RE = /temps (?:plein|complet)|full[- ]?time/i;
+const EXPLICIT_CONTRACT_RES = [
+  /(?:type\s+de\s+(?:contrat|poste)|contrat(?:\s+propos[ée])?|nature\s+du\s+contrat|statut|employment\s+type|job\s+type|contract\s+type|type\s+d['’]emploi)\s*[:：\-–]\s*([^\n.;|]{2,80})/gi,
+  /\b(?:poste|contrat|recrutement|embauche|opportunit[ée]|offre|cr[ée]ation\s+de\s+poste)\s+(?:en|de|d['’])\s*((?:cdi|cdd|free-?lance|alternance|int[ée]rim|stage|portage)(?:\s*(?:\/|,|ou|et|or|and|-)\s*(?:cdi|cdd|free-?lance|alternance|int[ée]rim|stage|portage|ind[ée]pendant))*)/gi,
+  /\b(cdi|cdd)\s+(?:à|a)\s+temps\s+(?:plein|partiel|complet)/gi,
+  /\ben\s+(cdi|cdd)\b/gi,
+];
+const FREELANCE_SIGNAL_RE = /\btjm\b|taux journalier|dur[ée]e\s+(?:de\s+(?:la\s+)?)?mission|mission\s+(?:de\s+|d['’]une\s+durée\s+de\s+)?\d+\s*mois|day rate|daily rate/i;
+
+/** Types de contrat cités explicitement dans un texte (mentions du type « Contrat : CDI », « poste en CDI »…). */
+export function explicitContracts(text) {
+  const found = new Set();
+  for (const re of EXPLICIT_CONTRACT_RES) {
+    for (const m of String(text).matchAll(re)) {
+      const chunk = m[1] || '';
+      const local = CONTRACT_TOKENS.filter(([, tre]) => tre.test(chunk)).map(([id]) => id);
+      if (!local.length && FULL_TIME_RE.test(chunk) && /employment|job type|type d['’]emploi/i.test(m[0])) local.push('cdi');
+      local.forEach((c) => found.add(c));
+    }
+  }
+  return [...found];
+}
+
 export function detectTechs(text) {
   if (!text) return [];
   return TECHS.filter((t) => t.re.test(text)).map((t) => t.id);
@@ -45,11 +77,17 @@ export function detectTechs(text) {
  * @returns {string[]}
  */
 export function inferContracts({ hints = [], title = '', description = '' }) {
-  const set = new Set(hints.filter((h) => CONTRACTS.includes(h)));
+  const set = new Set(hints.filter((h) => CONTRACTS.includes(h) && h !== 'autre'));
   if (set.size === 0) for (const [id, re] of CONTRACT_PATTERNS) if (re.test(title)) set.add(id);
-  if (set.size === 0) for (const [id, re] of CONTRACT_PATTERNS_DESC) if (re.test(description)) set.add(id);
+  if (set.size === 0) explicitContracts(description).forEach((c) => set.add(c));
+  if (set.size === 0) {
+    const head = description.slice(0, 1500);
+    for (const [id, re] of CONTRACT_PATTERNS_DESC) if (re.test(head)) set.add(id);
+    if (/\bCDI\b/.test(description)) set.add('cdi');
+    if (FREELANCE_SIGNAL_RE.test(description)) set.add('freelance');
+  }
   if (set.size === 0) set.add('autre');
-  return [...set];
+  return CONTRACTS.filter((c) => set.has(c));
 }
 
 export function inferRemote({ hint, text = '' }) {
@@ -151,9 +189,10 @@ export function normalizeJob(source, raw) {
 
   const techs = new Set(detectTechs(haystack));
   if (techs.size === 0 && !descriptionText) for (const t of raw.techHints || []) if (TECH_IDS.includes(t)) techs.add(t);
-  if (techs.size === 0) return null;
+  // Offre ajoutée à la main (post LinkedIn…) : conservée même si aucune de nos technos n'y est citée.
+  if (techs.size === 0 && !raw.forceKeep) return null;
 
-  const contracts = inferContracts({ hints: raw.contractHints || [], title, description: descriptionText.slice(0, 1500) });
+  const contracts = inferContracts({ hints: raw.contractHints || [], title, description: descriptionText });
   const remote = inferRemote({ hint: raw.remoteHint, text: `${title}\n${raw.location || ''}\n${descriptionText.slice(0, 2000)}` });
   const location = cleanText(raw.location);
   const country = inferCountry({ hint: raw.countryHint, location, remote });
@@ -186,5 +225,44 @@ export function normalizeJob(source, raw) {
     excerpt: descriptionText.slice(0, 280),
     tags: tags.slice(0, 40),
     fingerprint: `${slugify(company)}|${slugify(title)}`,
+    // Offre relue uniquement pour compléter sa fiche : ne doit pas compter comme « revue » dans les résultats du jour.
+    refreshOnly: !!raw.refreshOnly,
   };
+}
+
+/**
+ * Complète une offre existante (contrat inconnu, télétravail inconnu, rémunération absente) à partir de sa description.
+ * Renvoie les champs corrigés, ou null si rien ne change.
+ */
+export function repairJob(job) {
+  const text = htmlToText(job.description || '');
+  if (!text) return null;
+  let changed = false;
+  let contracts = job.contracts;
+  if (!contracts.length || (contracts.length === 1 && contracts[0] === 'autre')) {
+    const inferred = inferContracts({ title: job.title, description: text });
+    if (!(inferred.length === 1 && inferred[0] === 'autre')) {
+      contracts = inferred;
+      changed = true;
+    }
+  }
+  let remote = job.remote;
+  if (remote == null) {
+    const r = inferRemote({ text: `${job.title}\n${job.location || ''}\n${text.slice(0, 2000)}` });
+    if (r) {
+      remote = r;
+      changed = true;
+    }
+  }
+  let { tjmMin, tjmMax, salaryMin, salaryMax, currency, salary } = job;
+  if (tjmMin == null && salaryMin == null) {
+    const comp = extractCompensation({ salaryText: job.salary || '', title: job.title, description: text });
+    if (comp.tjmMin != null || comp.salaryMin != null) {
+      ({ tjmMin, tjmMax, salaryMin, salaryMax } = comp);
+      currency = comp.currency || currency || '€';
+      salary = [formatTjm(tjmMin, tjmMax, currency), formatAnnual(salaryMin, salaryMax, currency)].filter(Boolean).join(' · ') || salary;
+      changed = true;
+    }
+  }
+  return changed ? { contracts, remote, tjmMin, tjmMax, salaryMin, salaryMax, currency, salary: salary || '' } : null;
 }

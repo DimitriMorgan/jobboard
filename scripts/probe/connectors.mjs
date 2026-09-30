@@ -3,7 +3,14 @@
 import { CONNECTORS } from '../../server/connectors/index.js';
 import { normalizeJob } from '../../server/normalize.js';
 
-const ids = process.argv.slice(2);
+// Arguments KEY=VALUE → variables d'environnement (ex. LINKEDIN_MAX_REQUESTS=80), les autres → identifiants de sources.
+const args = process.argv.slice(2);
+for (const a of args.filter((x) => x.includes('='))) {
+  const [k, ...v] = a.split('=');
+  process.env[k] = v.join('=');
+}
+const ids = args.filter((x) => !x.includes('='));
+const manualUrls = (process.env.LINKEDIN_POST_URLS || '').split(/[\s,]+/).filter(Boolean);
 const targets = CONNECTORS.filter((c) => !ids.length || ids.includes(c.id));
 const count = (arr, f) => {
   const m = {};
@@ -14,7 +21,7 @@ const count = (arr, f) => {
 for (const c of targets) {
   const t0 = Date.now();
   const logs = [];
-  const ctx = { isKnown: () => false, needsDetail: () => true, known: () => null, lastRunAt: null, progress: (m) => logs.push(m) };
+  const ctx = { isKnown: () => false, needsDetail: () => true, known: () => null, knownJobs: () => [], lastSuccessAt: null, manualUrls, manualOnly: false, progress: (m) => logs.push(m) };
   console.log(`\n### ${c.id}`);
   try {
     const raw = await c.fetch(ctx);
@@ -28,5 +35,5 @@ for (const c of targets) {
   } catch (err) {
     console.log(`  ERREUR : ${err.message}`);
   }
-  for (const l of logs.slice(-12)) console.log(`  · ${l}`);
+  for (const l of logs.slice(-14)) console.log(`  · ${l}`);
 }
