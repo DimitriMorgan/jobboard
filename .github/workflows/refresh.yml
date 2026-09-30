@@ -2,7 +2,9 @@ name: Actualiser les offres et publier le site
 
 on:
   schedule:
-    - cron: '0 5 * * *' # tous les jours à 05:00 UTC (07:00 Paris en été, 06:00 en hiver)
+    # 03:17 UTC (05:17 Paris en été, 04:17 en hiver). GitHub retarde les tâches planifiées à l'heure pile
+    # (constaté : 4 à 6 h de retard pour « 0 5 * * * ») : minute creuse et marge pour des données prêtes le matin.
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       sources:

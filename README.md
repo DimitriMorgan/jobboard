@@ -90,7 +90,7 @@ Une offre non revue depuis 7 jours est signalée « peut-être retirée » (filt
 
 ## Hébergement gratuit : GitHub Actions + GitHub Pages (sans serveur)
 
-Le projet peut tourner sans aucun serveur : un workflow GitHub Actions (`.github/workflows/refresh.yml`) actualise les offres chaque matin (05:00 UTC) ou à la demande, publie les données JSON sur une branche `data`, construit le front en mode statique et le déploie sur GitHub Pages.
+Le projet peut tourner sans aucun serveur : un workflow GitHub Actions (`.github/workflows/refresh.yml`) actualise les offres chaque matin (planifié à 03:17 UTC, GitHub pouvant retarder le départ) ou à la demande, publie les données JSON sur une branche `data`, construit le front en mode statique et le déploie sur GitHub Pages.
 
 Mise en place (une seule fois) :
 
