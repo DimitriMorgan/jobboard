@@ -1,0 +1,40 @@
+name: Diagnostic des sources
+
+# Outil de maintenance : exécute un script de scripts/probe/ depuis les serveurs GitHub
+# (utile quand une source change de format). Ne publie aucune donnée.
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: 'Script de diagnostic (dossier scripts/probe/)'
+        required: true
+        default: 'connectors.mjs'
+      args:
+        description: 'Arguments du script (ex. identifiants de sources : linkedin wttj)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Diagnostic
+        env:
+          PROBE_SCRIPT: ${{ inputs.script }}
+          PROBE_ARGS: ${{ inputs.args }}
+        run: |
+          case "$PROBE_SCRIPT" in *..*|/*|*' '*) echo "Nom de script invalide"; exit 1;; esac
+          node --no-warnings=ExperimentalWarning "scripts/probe/$PROBE_SCRIPT" $PROBE_ARGS
