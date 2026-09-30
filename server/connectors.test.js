@@ -83,3 +83,25 @@ test('Posts LinkedIn : lecture d’un post public et conversion en offre', () =>
   assert.ok(manual);
   assert.deepEqual(manual.techs, []);
 });
+
+test('LesJeudis : ligne de méta éclatée en nœuds', async () => {
+  const { parseLesJeudis } = await import('./connectors/lesjeudis.js');
+  const [o] = parseLesJeudis(fixture('lesjeudis-card.html'), now);
+  assert.equal(o.sourceId, '78a2ff6a');
+  assert.equal(o.company, 'Fish Eye Technologies');
+  assert.equal(o.location, 'Neuilly-sur-Seine (92)');
+  assert.deepEqual(o.contractHints, ['cdi']);
+  assert.equal(o.remoteHint, 'partial');
+  assert.equal(o.salary, '45 – 55 k€/an');
+  assert.ok(o.tags.includes('PHP'));
+  assert.equal(o.publishedAt.slice(0, 10), '2026-09-16');
+  const job = normalizeJob('lesjeudis', o);
+  assert.deepEqual([job.salaryMin, job.salaryMax], [45000, 55000]);
+  assert.deepEqual(job.techs, ['php']);
+});
+
+test('Salaire avec devise en tête (titres Jobijoba)', async () => {
+  const { extractCompensation } = await import('./compensation.js');
+  const r = extractCompensation({ title: 'Développeur React Front End F/H - €45.000 - €53.000 Par An' });
+  assert.deepEqual([r.salaryMin, r.salaryMax], [45000, 53000]);
+});

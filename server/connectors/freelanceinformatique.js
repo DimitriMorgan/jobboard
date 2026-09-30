@@ -54,7 +54,7 @@ export default {
     }
     // Description complète pour les missions nouvelles qui semblent concerner nos technos (titre ou compétences).
     const relevant = (j) => detectTechs(`${j.title} ${j.tags.join(' ')} ${j.descriptionHtml}`).length > 0;
-    const read = await fillFromJsonLd([...jobs.values()], ctx, { limit: Number(process.env.DETAIL_FETCH_LIMIT) || 60, keep: relevant, getText });
+    const read = await fillFromJsonLd([...jobs.values()], ctx, { limit: Number(process.env.DETAIL_FETCH_LIMIT) || 60, keep: relevant, getText, fillCompany: false });
     ctx.progress?.(`Freelance-Informatique : ${jobs.size} missions, ${read} fiches lues`);
     return [...jobs.values()];
   },

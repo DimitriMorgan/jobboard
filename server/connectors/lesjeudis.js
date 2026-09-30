@@ -26,24 +26,36 @@ export function parseLesJeudis(html, now = new Date()) {
       .map((__, n) => $(n).text().replace(/\s+/g, ' ').trim())
       .get()
       .filter(Boolean);
-    const meta = texts.find((t) => t.includes('·')) || '';
-    const parts = meta.split('·').map((s) => s.trim());
-    const published = texts.find((t) => /^publi[ée]e/i.test(t)) || '';
-    const metaIndex = texts.indexOf(meta);
-    const pubIndex = published ? texts.indexOf(published) : texts.length;
-    const skills = metaIndex >= 0 ? texts.slice(metaIndex + 1, pubIndex).filter((t) => t.length <= 30 && !/^\+\d+$/.test(t)) : [];
+    // Ligne de méta : « Lieu · CDI · Hybride · 50 – 65 k€/an » (chaque valeur et chaque « · » sont des nœuds distincts)
+    const dot = texts.indexOf('·');
+    const meta = [];
+    let metaEnd = dot;
+    if (dot > 0) {
+      meta.push(texts[dot - 1]);
+      let i = dot;
+      while (texts[i] === '·' && i + 1 < texts.length) {
+        meta.push(texts[i + 1]);
+        i += 2;
+      }
+      metaEnd = i;
+    }
+    const pubIdx = texts.findIndex((t) => /^publi[ée]e/i.test(t));
+    const published = pubIdx < 0 ? '' : /^publi[ée]e$/i.test(texts[pubIdx]) ? texts[pubIdx + 1] || '' : texts[pubIdx].replace(/^publi[ée]e\s*(le\s*)?/i, '');
+    const skills = dot > 0 ? texts.slice(metaEnd, pubIdx < 0 ? texts.length : pubIdx).filter((t) => t.length <= 30 && !/^\+\d+$/.test(t)) : [];
+    const category = dot > 1 ? texts[dot - 2] : '';
+    const rest = meta.slice(1).join(' ');
     out.push({
       sourceId: href.split('-').pop(),
       title: a.attr('aria-label'),
       company,
-      location: parts[0] || '',
+      location: meta[0] || '',
       countryHint: 'FR',
-      contractHints: contractFromLabel(parts.slice(1).join(' ')),
-      remoteHint: remoteFromLabel(parts.slice(1).join(' ')),
-      salary: parts.find((p) => /€|k€/.test(p)) || '',
+      contractHints: contractFromLabel(rest),
+      remoteHint: remoteFromLabel(rest),
+      salary: meta.slice(1).find((p) => /€/.test(p)) || '',
       url: `${BASE}${href}`,
-      publishedAt: parseFrenchDate(published.replace(/^publi[ée]e\s*(le\s*)?/i, ''), now),
-      tags: skills,
+      publishedAt: parseFrenchDate(published, now),
+      tags: [...skills, category].filter(Boolean),
     });
   });
   return out;

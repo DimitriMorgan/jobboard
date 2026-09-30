@@ -5,11 +5,16 @@ import { rowToJob, STATUSES } from './db.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
 import { TECHS, CONTRACTS } from './normalize.js';
 import { MANUAL_PLATFORMS } from '../shared/manualLinks.js';
+import { DESCRIPTION_SHARDS, DESCRIPTIONS_DIR, shardFile, shardOf } from '../shared/shard.js';
 
 export const JOBS_FILE = 'jobs.json';
-export const DESCRIPTIONS_FILE = 'descriptions.json';
+/** Ancien format : toutes les descriptions dans un seul fichier (encore lu à l'import, plus écrit). */
+export const LEGACY_DESCRIPTIONS_FILE = 'descriptions.json';
 
-/** Écrit jobs.json (tout sauf les descriptions) et descriptions.json dans `dir`. */
+/**
+ * Écrit jobs.json (tout sauf les descriptions) et les descriptions réparties en DESCRIPTION_SHARDS fichiers
+ * (descriptions/00.json…) dans `dir`, pour que le site ne charge que le fichier de l'offre ouverte.
+ */
 export function exportStatic(db, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const latestRun = db.latestRun();
@@ -34,6 +39,7 @@ export function exportStatic(db, dir) {
   });
   const payload = {
     format: 1,
+    descriptionShards: DESCRIPTION_SHARDS,
     generatedAt: new Date().toISOString(),
     latestRun: latestRun ? { id: latestRun.id, startedAt: latestRun.started_at, finishedAt: latestRun.finished_at, totalSeen: latestRun.total_seen, totalNew: latestRun.total_new } : null,
     meta: {
@@ -46,9 +52,32 @@ export function exportStatic(db, dir) {
     sources,
     jobs,
   };
+  // Chaque fichier est écrit, même vide, pour que le site n'ait jamais de 404 sur une offre sans description.
+  const shards = Array.from({ length: DESCRIPTION_SHARDS }, () => ({}));
+  for (const [id, text] of Object.entries(descriptions)) shards[shardOf(id)][id] = text;
+  fs.rmSync(path.join(dir, DESCRIPTIONS_DIR), { recursive: true, force: true });
+  fs.mkdirSync(path.join(dir, DESCRIPTIONS_DIR), { recursive: true });
+  shards.forEach((content, n) => fs.writeFileSync(path.join(dir, shardFile(n)), JSON.stringify(content)));
+  fs.rmSync(path.join(dir, LEGACY_DESCRIPTIONS_FILE), { force: true });
   fs.writeFileSync(path.join(dir, JOBS_FILE), JSON.stringify(payload));
-  fs.writeFileSync(path.join(dir, DESCRIPTIONS_FILE), JSON.stringify(descriptions));
-  return { jobs: jobs.length, descriptions: Object.keys(descriptions).length };
+  return { jobs: jobs.length, descriptions: Object.keys(descriptions).length, files: shards.length };
+}
+
+/** Lit toutes les descriptions disponibles dans `dir` : ancien fichier unique puis fichiers répartis. */
+function readDescriptions(dir) {
+  const out = {};
+  const files = [path.join(dir, LEGACY_DESCRIPTIONS_FILE)];
+  const shardDir = path.join(dir, DESCRIPTIONS_DIR);
+  if (fs.existsSync(shardDir)) for (const f of fs.readdirSync(shardDir).sort()) if (f.endsWith('.json')) files.push(path.join(shardDir, f));
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      Object.assign(out, JSON.parse(fs.readFileSync(file, 'utf8')));
+    } catch (err) {
+      console.warn(`${path.relative(dir, file)} illisible (${err.message}) : descriptions ignorées`);
+    }
+  }
+  return out;
 }
 
 /** Recharge un export précédent dans une base (vide). Renvoie le nombre d'offres importées. */
@@ -62,12 +91,7 @@ export function importStatic(db, dir) {
     console.warn(`jobs.json illisible (${err.message}) : on repart de zéro`);
     return 0;
   }
-  let descriptions = {};
-  try {
-    if (fs.existsSync(path.join(dir, DESCRIPTIONS_FILE))) descriptions = JSON.parse(fs.readFileSync(path.join(dir, DESCRIPTIONS_FILE), 'utf8'));
-  } catch {
-    descriptions = {};
-  }
+  const descriptions = readDescriptions(dir);
   if (payload.latestRun) db.importRun(payload.latestRun);
   for (const s of payload.sources || []) if (s.lastRunAt) db.importSource(s);
   const rows = (payload.jobs || []).map((j) => ({ ...j, description: descriptions[j.id] || '' }));

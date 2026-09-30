@@ -46,20 +46,38 @@ Les données sont stockées dans `data/jobboard.sqlite` (modifiable via `DB_PATH
 
 | Source | Type | Périmètre | Remarques |
 | --- | --- | --- | --- |
+| LinkedIn (offres) | Endpoint public « guest » (HTML) | France, depuis la dernière actualisation (24 h à 7 jours) | 11 requêtes (react, node.js, php, .net, javascript, typescript, symfony, c#, nestjs, laravel, freelance) en pagination profonde ; fiche de chaque nouvelle offre lue pour le type de contrat (LinkedIn ignore les filtres de contrat hors connexion). Budget : `LINKEDIN_MAX_REQUESTS` (1300), `LINKEDIN_DETAIL_LIMIT` (1000). Rythme ralenti automatiquement en cas de 429 |
+| Posts LinkedIn | Posts publics (JSON-LD) | Annonces publiées en posts (« je recrute… ») | Ajout manuel depuis le site (bouton « ＋ Post LinkedIn » ou favori « Ajouter au JobBoard »). Découverte automatique optionnelle avec `TAVILY_API_KEY` (gratuit, 1 000 requêtes/mois) ou `SERPAPI_KEY` ; les candidats (« je suis disponible… ») sont écartés |
 | Free-Work | API JSON du site | Freelance + CDI IT France | Descriptions complètes, TJM / salaire |
-| LinkedIn | Endpoint public « guest » (HTML) | CDI (`f_JT=F`) et contrat/freelance (`f_JT=C`), France, 7 derniers jours | Quotas stricts : `LINKEDIN_PAGES=1` par défaut, description récupérée pour les nouvelles offres seulement (`DETAIL_FETCH_LIMIT`). Un 429 rend le résultat partiel, réessayer plus tard |
 | Welcome to the Jungle | Index Algolia public du site + API détail | France + full remote | Clés Algolia surchargables dans `.env` si elles changent |
 | APEC | Webservice JSON du site | Cadres, CDI/CDD | |
-| HelloWork | Pages HTML de recherche | CDI/CDD/freelance | Extraction tolérante (JSON-LD puis liens) ; peut casser si le site change |
+| HelloWork | Pages HTML de recherche + fiche JSON-LD | CDI/CDD/freelance | Extraction tolérante ; peut casser si le site change |
+| Collective.work | Données de recherche embarquées | Freelance + CDI tech | TJM, télétravail, description complète |
+| Freelance-Informatique | Liste JSON-LD paginée + fiche | ≈ 500 missions freelance IT | Compétences requises, description complète |
+| Freelance Republik | Cartes HTML + fiche JSON-LD | ≈ 100 missions freelance/semaine | |
+| LesJeudis | Cartes HTML + fiche JSON-LD | ≈ 3 000 offres « Développement » | Contrat, salaire, télétravail, compétences |
+| Meteojob | Données de recherche embarquées | CDI, CDD, intérim, freelance | Description complète |
+| Jobijoba | Pages de résultats HTML | Agrégateur français | Contrat, salaire, télétravail ; doublons regroupés dans le site |
+| Codeur.com | Flux RSS | Projets freelance (souvent courts) | Budget indiqué |
 | France Travail | API officielle v2 | Toutes offres France | Identifiants gratuits sur francetravail.io |
 | Adzuna | API officielle | Agrégateur (Indeed-like) | Identifiants gratuits sur developer.adzuna.com |
 | Jooble | API officielle | Agrégateur | Clé gratuite sur demande |
-| Remotive, Arbeitnow, Jobicy, Remote OK, Himalayas, We Work Remotely, The Muse | API / RSS publiques | Offres remote / Europe | Filtrées ensuite par technos |
+| Remotive, Arbeitnow, Jobicy, Remote OK, Himalayas, We Work Remotely, Working Nomads, The Muse | API / RSS publiques | Offres remote / Europe | Filtrées ensuite par technos |
 | Hacker News « Who is hiring? » | API Algolia HN | Annonces mentionnant France / remote | |
 
-Plateformes sans API exploitable (anti-bot ou connexion obligatoire) — Indeed, Malt, Comet, Glassdoor, JobTeaser, Monster, Cadremploi, LesJeudis, ChooseYourBoss, Talent.com, Codeur, Freelance-Informatique — sont accessibles via des **liens de recherche pré-remplis** dans l'onglet Sources.
+Sites testés depuis GitHub Actions mais non intégrables : Indeed, Glassdoor, Monster, Cadremploi, ChooseYourBoss, LeHibou et Optioncarriere bloquent les robots (captcha / Cloudflare) ; Talent.com et WeLoveDevs chargent leurs offres côté navigateur ; les moteurs de recherche (Google, Bing, DuckDuckGo, Brave…) refusent ou faussent les requêtes automatiques, d'où le recours à une API de recherche pour découvrir des posts LinkedIn. Ces plateformes restent accessibles via les **liens de recherche pré-remplis** de l'onglet Sources.
+
+Une même offre publiée sur plusieurs sites (même entreprise, même intitulé) est affichée une seule fois, avec des liens « + autre site ».
 
 Les sources sont désactivables via `DISABLED_SOURCES=hellowork,hackernews`.
+
+### Ajouter un post LinkedIn vu dans son fil
+
+Beaucoup de missions ne sont publiées qu'en post (« Je cherche un dev React freelance, TJM 550 € »). Dans le site : bouton **＋ Post LinkedIn**, collez l'adresse du post (menu « … » du post → « Copier le lien vers le post ») ou d'une offre LinkedIn. Le workflow GitHub lit le post public (texte, auteur, date), en déduit contrat, TJM ou salaire, télétravail et technos, et l'ajoute avec le badge « Nouveau » (actualisation partielle : 1 à 2 minutes, jeton GitHub requis). Le même dialogue propose un favori « Ajouter au JobBoard » à glisser dans la barre du navigateur.
+
+### Outil de diagnostic
+
+Le workflow manuel **Diagnostic des sources** (onglet Actions) exécute un script de `scripts/probe/` depuis les serveurs GitHub, sans rien publier : `connectors.mjs linkedin wttj` teste des sources (options `CLE=valeur`, ex. `LINKEDIN_MAX_REQUESTS=80`), `sources.mjs` vérifie l'accessibilité de sites candidats. Utile quand une source change de format.
 
 ## Fonctionnement
 
@@ -80,7 +98,7 @@ Mise en place (une seule fois) :
 2. **Pages** : le workflow pousse le site construit sur la branche `gh-pages`. GitHub active en général Pages automatiquement pour cette branche ; sinon, Settings → Pages → Source : **Deploy from a branch** → `gh-pages` / `(root)`.
 3. **Première actualisation** : onglet Actions → « Actualiser les offres et publier le site » → *Run workflow*. Le site est ensuite disponible sur `https://<utilisateur>.github.io/<dépôt>/`.
 4. **Bouton Actualiser et synchronisation du suivi** (optionnel) : créez un jeton personnel à granularité fine (Settings → Developer settings → Fine-grained tokens) avec, sur le dépôt du site, *Actions : Read and write* et, sur un dépôt **privé** dédié au suivi (par exemple `jobboard-suivi`), *Contents : Read and write*. Renseignez-le dans l'onglet Sources → Paramètres GitHub du site. Le jeton ne quitte jamais votre navigateur.
-5. **Clés API optionnelles** (France Travail, Adzuna, Jooble) : Settings → Secrets and variables → Actions → *Secrets*. Réglages (`LINKEDIN_PAGES`, `DETAIL_FETCH_LIMIT`, `DISABLED_SOURCES`, `RETENTION_DAYS`) : même écran, onglet *Variables*.
+5. **Clés API optionnelles** (France Travail, Adzuna, Jooble, `TAVILY_API_KEY` ou `SERPAPI_KEY` pour découvrir des posts LinkedIn) : Settings → Secrets and variables → Actions → *Secrets*. Réglages (`LINKEDIN_MAX_REQUESTS`, `LINKEDIN_DETAIL_LIMIT`, `DETAIL_FETCH_LIMIT`, `DISABLED_SOURCES`, `RETENTION_DAYS`) : même écran, onglet *Variables*.
 
 Sans jeton, le bouton Actualiser du site indique comment lancer le workflow depuis GitHub ; l'actualisation planifiée du matin fonctionne dans tous les cas.
 
@@ -89,8 +107,9 @@ Points d'attention :
 - Les runners GitHub ont des adresses IP de datacenter : LinkedIn et HelloWork peuvent bloquer davantage que depuis un poste personnel. L'onglet Sources du site montre l'état de chaque source.
 - GitHub désactive les workflows planifiés après 60 jours sans activité sur le dépôt ; un simple commit ou un lancement manuel les réactive.
 - Les offres non revues depuis `RETENTION_DAYS` jours (60 par défaut) sont purgées de l'export.
-- Les descriptions des offres LinkedIn, WTTJ, APEC et HelloWork sont récupérées page par page, dans la limite de `DETAIL_FETCH_LIMIT` par source et par actualisation ; les offres connues sans description sont complétées au fil des jours.
-- Les données publiées vivent sur la branche `data` du dépôt (`jobs.json`, `descriptions.json`), écrasées à chaque actualisation.
+- Les fiches détaillées (description, type de contrat) sont lues pour les nouvelles offres, dans la limite de `LINKEDIN_DETAIL_LIMIT` pour LinkedIn et `DETAIL_FETCH_LIMIT` pour les autres sources ; les offres connues sans fiche sont complétées au fil des jours. Une offre revue sans sa fiche ne perd jamais les informations déjà obtenues (contrat, critères, rémunération).
+- L'actualisation complète dure maintenant 30 à 40 minutes (pagination LinkedIn et lecture des fiches, au rythme d'une requête toutes les 1,3 s environ) ; un ajout de post LinkedIn est une actualisation partielle de 1 à 2 minutes. Le badge « Nouveau » désigne les offres découvertes depuis la dernière actualisation complète.
+- Les données publiées vivent sur la branche `data` du dépôt (`jobs.json`, et les descriptions réparties en 64 fichiers `descriptions/NN.json` pour que le site ne charge que celui de l'offre ouverte), écrasées à chaque actualisation.
 - En local, le mode statique se teste avec `npm run refresh:static` (données dans `data/static/`) puis `npm run dev:static`.
 
 ## Actualisation automatique (mode serveur)
@@ -106,7 +125,7 @@ Points d'attention :
 | GET | `/api/jobs?techs=react,php&contracts=freelance&country=FR_OR_REMOTE&sinceDays=7&q=symfony&onlyNew=1&tjmMin=500&salaryMin=45000&withPay=1&sort=tjm` | Liste filtrée (tri : `published`, `seen`, `status`, `tjm`, `salary`) |
 | GET | `/api/jobs/:id` | Détail + doublons sur d'autres sources |
 | PATCH | `/api/jobs/:id` | `{ status, notes, favorite }` |
-| POST | `/api/refresh` | Lance une actualisation (`{ only: "freework,wttj" }` optionnel) |
+| POST | `/api/refresh` | Lance une actualisation (`{ only: "freework,wttj", manualUrls: ["https://www.linkedin.com/posts/…"] }` optionnels) |
 | GET | `/api/refresh/status` | Progression en cours |
 | GET | `/api/sources` | État des connecteurs |
 | GET | `/api/stats` | Compteurs (technos, contrats, statuts, nouveautés) |

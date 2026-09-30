@@ -178,3 +178,10 @@ code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; }
 .settings-backup { margin-top: 14px; }
 .settings-backup summary { cursor: pointer; color: var(--muted); }
 .settings-backup textarea { margin: 8px 0; font-family: ui-monospace, monospace; font-size: 11px; }
+
+.secondary-btn { background: var(--bg-3); border: 1px solid var(--border); color: var(--text); font-weight: 600; padding: 8px 14px; border-radius: 8px; }
+.badge.also { text-decoration: none; opacity: 0.85; }
+.badge.also:hover { opacity: 1; text-decoration: none; border: 1px solid var(--accent); }
+.modal { position: fixed; top: 10vh; left: 50%; transform: translateX(-50%); width: min(640px, 94vw); background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); z-index: 32; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 12px; }
+.modal h2 { margin: 0; font-size: 18px; }
+.modal textarea { font-family: ui-monospace, monospace; font-size: 12px; }

@@ -41,7 +41,7 @@ export default {
   async fetch(ctx) {
     const html = await getText(`${BASE}/freelance`, { retries: 1 });
     const jobs = parseFreelanceRepublik(html);
-    const read = await fillFromJsonLd(jobs, ctx, { limit: Number(process.env.DETAIL_FETCH_LIMIT) || 60, getText });
+    const read = await fillFromJsonLd(jobs, ctx, { limit: Number(process.env.DETAIL_FETCH_LIMIT) || 60, getText, fillCompany: false });
     ctx.progress?.(`Freelance Republik : ${jobs.length} missions, ${read} fiches lues`);
     return jobs;
   },

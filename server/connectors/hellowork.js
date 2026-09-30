@@ -1,7 +1,7 @@
 // HelloWork : pages HTML de recherche (structure susceptible de changer ; extraction tolérante).
 import * as cheerio from 'cheerio';
 import { getText, sleep } from '../http.js';
-import { TECH_QUERIES } from '../normalize.js';
+import { TECH_QUERIES, resolveContracts, htmlToText } from '../normalize.js';
 
 const SEARCH = 'https://www.hellowork.com/fr-fr/emploi/recherche.html';
 
@@ -27,7 +27,7 @@ export default {
   id: 'hellowork',
   name: 'HelloWork',
   site: 'https://www.hellowork.com',
-  description: 'Offres HelloWork (CDI/CDD/freelance) par analyse des pages de recherche.',
+  description: 'Offres HelloWork (CDI/CDD/freelance) : pages de recherche et fiche JSON-LD (contrat, lieu, salaire).',
   async fetch(ctx) {
     const jobs = new Map();
     for (const [tech, keywords] of Object.entries(TECH_QUERIES)) {
@@ -76,8 +76,11 @@ export default {
         }
         const texts = card.find('p, span, div').map((_, e) => $(e).text().trim()).get().filter((t) => t && t.length < 80);
         const company = card.find('[data-cy="offerCompany"], .company, [class*="company"]').first().text().trim() || texts[1] || '';
-        const location = card.find('[data-cy="localisationCard"], [class*="localisation"], [class*="location"]').first().text().trim() || texts.find((t) => /\d{2}\b|\(\d+\)/.test(t)) || '';
-        const contractText = card.find('[data-cy="contractCard"], [class*="contract"]').first().text() || texts.join(' ');
+        const location =
+          card.find('[data-cy="localisationCard"], [class*="localisation"], [class*="location"]').first().text().trim() ||
+          texts.find((t) => t !== title && t.length < 50 && /\(\d{2,3}\)|\b\d{5}\b|^[A-ZÉ][\wéèêàâîôûç' -]+ - \d{2}$/.test(t)) ||
+          '';
+        const contractText = card.find('[data-cy="contractCard"], [class*="contract"]').first().text();
         jobs.set(id, {
           sourceId: id,
           title,
@@ -95,38 +98,44 @@ export default {
       await sleep(800);
     }
 
+    // Offres déjà connues dont le contrat est resté inconnu : relues (dans la limite du budget) pour compléter la fiche.
+    const recent = Date.now() - 21 * 86400e3;
+    for (const k of ctx.knownJobs?.() || []) {
+      if (jobs.has(k.sourceId) || !k.contracts.every((c) => c === 'autre') || Date.parse(k.lastSeenAt) < recent || !k.url) continue;
+      jobs.set(k.sourceId, { sourceId: k.sourceId, title: k.title, company: k.company, location: k.location, url: k.url, countryHint: 'FR', contractHints: [], techHints: [], tags: [], refreshOnly: true, recheck: true });
+    }
+
     // Détail des nouvelles offres : la page d'une offre embarque un JobPosting JSON-LD (description, lieu, contrat, salaire).
-    const limit = Number(process.env.DETAIL_FETCH_LIMIT ?? 40);
+    const limit = Number(process.env.DETAIL_FETCH_LIMIT ?? 60);
     let fetched = 0;
     for (const job of jobs.values()) {
       if (fetched >= limit) break;
-      if (job.descriptionHtml || !ctx.needsDetail(job.sourceId)) continue;
+      if (!job.recheck && (job.descriptionHtml || !ctx.needsDetail(job.sourceId))) continue;
       try {
         const html = await getText(job.url, { retries: 0 });
         const $ = cheerio.load(html);
         const jp = extractJsonLd($)[0];
         if (jp) {
           job.descriptionHtml = jp.description || '';
-          job.location = job.location || [jp.jobLocation?.address?.addressLocality, jp.jobLocation?.address?.postalCode].filter(Boolean).join(' ');
+          const loc = [jp.jobLocation?.address?.addressLocality, jp.jobLocation?.address?.postalCode].filter(Boolean).join(' ');
+          if (loc) job.location = loc;
           job.company = job.company || jp.hiringOrganization?.name || '';
           job.publishedAt = job.publishedAt || jp.datePosted;
           const et = String(Array.isArray(jp.employmentType) ? jp.employmentType.join(' ') : jp.employmentType || '');
-          const hint = /FULL_TIME/i.test(et) ? 'cdi' : /CONTRACTOR/i.test(et) ? 'freelance' : /TEMPORARY/i.test(et) ? 'cdd' : /INTERN/i.test(et) ? 'stage' : null;
-          if (hint && !job.contractHints.includes(hint)) job.contractHints.push(hint);
           const sal = jp.baseSalary?.value;
+          const unit = String(sal?.unitText || '').toUpperCase();
           if (sal && (sal.minValue || sal.maxValue || sal.value)) {
-            const unit = String(sal.unitText || '').toUpperCase();
             const min = Number(sal.minValue || sal.value) || null;
             const max = Number(sal.maxValue || sal.value) || null;
             job.compensation = unit === 'DAY' ? { tjmMin: min, tjmMax: max, currency: '€' } : unit === 'MONTH' ? { salaryMin: min && min * 12, salaryMax: max && max * 12, currency: '€' } : unit === 'YEAR' ? { salaryMin: min, salaryMax: max, currency: '€' } : undefined;
           }
+          const strong = [];
+          if (/CONTRACTOR/i.test(et) || unit === 'DAY') strong.push('freelance');
+          if (/TEMPORARY/i.test(et)) strong.push('cdd');
+          if (/INTERN/i.test(et)) strong.push('stage');
+          job.contractHints = resolveContracts({ title: job.title, description: htmlToText(job.descriptionHtml), strong, weak: /FULL_TIME/i.test(et) ? ['cdi'] : job.contractHints });
         } else {
           job.descriptionHtml = $('[class*="description"], section, article').first().html() || '';
-        }
-        const contractText = $('body').text();
-        if (!job.contractHints.length) {
-          if (/\bCDI\b/.test(contractText)) job.contractHints.push('cdi');
-          else if (/free-?lance|ind[ée]pendant/i.test(contractText)) job.contractHints.push('freelance');
         }
         fetched++;
         await sleep(600);
@@ -134,6 +143,7 @@ export default {
         /* détail indisponible */
       }
     }
-    return [...jobs.values()];
+    // Les offres relues sans succès ne sont pas renvoyées (elles ne doivent pas compter comme revues aujourd'hui).
+    return [...jobs.values()].filter((j) => !j.recheck || j.descriptionHtml);
   },
 };

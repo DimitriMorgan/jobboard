@@ -52,6 +52,8 @@ function extractSalary(text) {
     { re: new RegExp(`(?:€|\\$|£)?\\s*${NUM}${K}(?!\\s*(?:\\/|par|per)\\s*(?:j|jour|day|mois|month))`, 'i'), mult: 1000, requireContext: true },
     // 45 000 € (brut annuel) / 45000-55000 €
     { re: new RegExp(`${NUM}(?:${SEP}${NUM})?\\s*(?:€|euros?|\\$|usd|£)\\s*(?:brut|bruts|gross|net)?\\s*(?:\\/|par|per)?\\s*(?:an|annuel|annuels|year|yr|a\\b)?`, 'i'), mult: 1 },
+    // €45.000 - €53.000 par an (devise avant le montant)
+    { re: new RegExp(`(?:€|\\$|£)\\s*${NUM}(?:${SEP}(?:€|\\$|£)?\\s*${NUM})?`, 'i'), mult: 1 },
     // 3 500 € / mois
     { re: new RegExp(`${NUM}(?:${SEP}${NUM})?\\s*(?:€|euros?|\\$|£)\\s*(?:brut|net)?\\s*(?:\\/|par|per)\\s*(?:mois|month)`, 'i'), mult: 12 },
   ];

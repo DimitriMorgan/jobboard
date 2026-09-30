@@ -25,8 +25,11 @@ async function gh(cfg, path, { method = 'GET', body, headers = {} } = {}) {
 
 export const whoAmI = (cfg) => gh(cfg, '/user');
 
-export const dispatchWorkflow = (cfg) =>
-  gh(cfg, `/repos/${cfg.repo}/actions/workflows/${encodeURIComponent(cfg.workflow)}/dispatches`, { method: 'POST', body: { ref: cfg.branch } });
+export const dispatchWorkflow = (cfg, inputs) =>
+  gh(cfg, `/repos/${cfg.repo}/actions/workflows/${encodeURIComponent(cfg.workflow)}/dispatches`, {
+    method: 'POST',
+    body: { ref: cfg.branch, ...(inputs && Object.keys(inputs).length ? { inputs } : {}) },
+  });
 
 export async function latestWorkflowRun(cfg) {
   const data = await gh(cfg, `/repos/${cfg.repo}/actions/workflows/${encodeURIComponent(cfg.workflow)}/runs?per_page=1`);

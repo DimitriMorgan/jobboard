@@ -5,10 +5,11 @@
 //  - seuls les mots-clés, le lieu et la période (f_TPR) sont appliqués : les filtres type de contrat (f_JT),
 //    télétravail (f_WT) et expérience (f_E) sont ignorés pour un visiteur non connecté ;
 //  - le type de contrat se lit donc sur la fiche (« Type d’emploi : Temps plein / Contrat / Stage… ») ;
-//  - ~170 requêtes à 1 req/s n'ont déclenché aucun 429, mais LinkedIn peut limiter : rythme et budget sont bornés.
+//  - 900 requêtes d'affilée à ~1,4 s d'intervalle n'ont déclenché aucun 429, mais LinkedIn peut limiter :
+//    rythme et budget sont bornés (1 300 requêtes ≈ 30 min par actualisation).
 import * as cheerio from 'cheerio';
 import { getText, sleep, HttpError } from '../http.js';
-import { inferContracts, htmlToText } from '../normalize.js';
+import { inferContracts, htmlToText, detectTechs } from '../normalize.js';
 
 const SEARCH = 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search';
 const DETAIL = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/';
@@ -31,10 +32,14 @@ export const LINKEDIN_QUERIES = [
 
 const num = (v, d) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Number(v) : d);
 
-/** Période de recherche (secondes) : depuis le dernier passage réussi + 6 h de marge, entre 24 h et 7 jours. */
-export function searchWindowSeconds(lastSuccessAt, now = Date.now()) {
+/**
+ * Période de recherche (secondes) : depuis le dernier passage réussi + 6 h de marge, entre 24 h et 7 jours.
+ * Rattrapage sur 7 jours tant que la base contient peu d'offres LinkedIn récentes (première exécution, longue coupure…).
+ */
+export function searchWindowSeconds(lastSuccessAt, now = Date.now(), recentKnown = Infinity) {
   const forced = num(process.env.LINKEDIN_WINDOW_HOURS, null);
   if (forced) return Math.round(forced * 3600);
+  if (recentKnown < num(process.env.LINKEDIN_CATCHUP_BELOW, 800)) return 7 * 86400;
   const last = lastSuccessAt ? Date.parse(lastSuccessAt) : NaN;
   const seconds = Number.isFinite(last) ? Math.ceil((now - last) / 1000) + 6 * 3600 : 7 * 86400;
   return Math.min(Math.max(seconds, 86400), 7 * 86400);
@@ -111,10 +116,12 @@ export default {
   site: 'https://www.linkedin.com/jobs',
   description: 'Offres LinkedIn France (recherche publique sans connexion, pagination profonde, fiche lue pour le type de contrat).',
   async fetch(ctx) {
-    const maxRequests = num(process.env.LINKEDIN_MAX_REQUESTS, 500);
-    const detailLimit = num(process.env.LINKEDIN_DETAIL_LIMIT, 250);
+    const maxRequests = num(process.env.LINKEDIN_MAX_REQUESTS, 1300);
+    const detailLimit = num(process.env.LINKEDIN_DETAIL_LIMIT, 1000);
     const baseDelay = num(process.env.LINKEDIN_DELAY_MS, 1100);
-    const windowSec = searchWindowSeconds(ctx.lastSuccessAt);
+    const weekAgo = Date.now() - 7 * 86400e3;
+    const recentKnown = (ctx.knownJobs?.() || []).filter((k) => Date.parse(k.firstSeenAt) > weekAgo).length;
+    const windowSec = searchWindowSeconds(ctx.lastSuccessAt, Date.now(), ctx.knownJobs ? recentKnown : Infinity);
     let requests = 0;
     let delay = baseDelay;
     let consecutive429 = 0;
@@ -195,7 +202,14 @@ export default {
       .filter((k) => !jobs.has(k.sourceId) && needsCriteria(k) && Date.parse(k.lastSeenAt) > recentLimit)
       .sort((a, b) => Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt))
       .map((k) => ({ sourceId: k.sourceId, title: k.title, company: k.company, location: k.location, url: k.url, countryHint: 'FR', contractHints: [], techHints: [], refreshOnly: true }));
-    const queue = [...fresh, ...backfill].slice(0, detailLimit);
+    // Priorité : offres dont l'intitulé cite une de nos technos, puis les autres ; un quart du budget pour compléter les anciennes.
+    const titled = (j) => detectTechs(j.title || '').length > 0;
+    const byRelevance = (list) => [...list.filter(titled), ...list.filter((j) => !titled(j))];
+    const freshQ = byRelevance(fresh);
+    const backQ = byRelevance(backfill);
+    const backShare = backQ.length ? Math.min(backQ.length, Math.floor(detailLimit / 4)) : 0;
+    const queue = [...freshQ.slice(0, detailLimit - backShare), ...backQ.slice(0, backShare)];
+    if (queue.length < detailLimit) queue.push(...[...freshQ.slice(detailLimit - backShare), ...backQ.slice(backShare)].slice(0, detailLimit - queue.length));
     let details = 0;
     for (const job of queue) {
       if (stopped) break;

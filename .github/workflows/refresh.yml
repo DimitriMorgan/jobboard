@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '0 5 * * *' # tous les jours à 05:00 UTC (07:00 Paris en été, 06:00 en hiver)
   workflow_dispatch:
+    inputs:
+      sources:
+        description: 'Sources à actualiser, séparées par des virgules (vide = toutes). Ex. : linkedin-posts'
+        required: false
+        default: ''
+      linkedin_urls:
+        description: 'Posts ou offres LinkedIn à ajouter (URL séparées par des espaces)'
+        required: false
+        default: ''
   push:
     branches: ['**']
 
@@ -19,6 +28,7 @@ jobs:
     # Sur push, ne déployer que depuis la branche par défaut (le planning et le bouton Actualiser s'y exécutent déjà).
     if: github.event_name != 'push' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +43,7 @@ jobs:
         run: |
           mkdir -p data/static
           if git fetch origin data --depth=1 2>/dev/null; then
-            git show origin/data:jobs.json > data/static/jobs.json || true
-            git show origin/data:descriptions.json > data/static/descriptions.json || true
+            git archive origin/data | tar -x -C data/static
             echo "Données précédentes récupérées"
           else
             echo "Pas encore de branche data : première actualisation"
@@ -43,9 +52,13 @@ jobs:
       - name: Actualiser les offres
         run: npm run refresh:static
         env:
+          ONLY_SOURCES: ${{ inputs.sources }}
+          LINKEDIN_POST_URLS: ${{ inputs.linkedin_urls }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           RETENTION_DAYS: ${{ vars.RETENTION_DAYS || 60 }}
-          LINKEDIN_MAX_REQUESTS: ${{ vars.LINKEDIN_MAX_REQUESTS || 500 }}
-          LINKEDIN_DETAIL_LIMIT: ${{ vars.LINKEDIN_DETAIL_LIMIT || 250 }}
+          LINKEDIN_MAX_REQUESTS: ${{ vars.LINKEDIN_MAX_REQUESTS || 1300 }}
+          LINKEDIN_DETAIL_LIMIT: ${{ vars.LINKEDIN_DETAIL_LIMIT || 1000 }}
           DETAIL_FETCH_LIMIT: ${{ vars.DETAIL_FETCH_LIMIT || 60 }}
           DISABLED_SOURCES: ${{ vars.DISABLED_SOURCES }}
           FRANCE_TRAVAIL_CLIENT_ID: ${{ secrets.FRANCE_TRAVAIL_CLIENT_ID }}
@@ -66,9 +79,11 @@ jobs:
             git worktree add /tmp/data-wt -B data origin/data
           else
             git worktree add --detach /tmp/data-wt
-            (cd /tmp/data-wt && git checkout --orphan data && git rm -rfq . 2>/dev/null || true)
+            (cd /tmp/data-wt && git checkout --orphan data)
           fi
-          cp data/static/jobs.json data/static/descriptions.json /tmp/data-wt/
+          # On repart d'un dossier vide : les fichiers qui n'existent plus (ancien descriptions.json) disparaissent.
+          (cd /tmp/data-wt && git rm -rfq . 2>/dev/null || true)
+          cp -r data/static/jobs.json data/static/descriptions /tmp/data-wt/
           cd /tmp/data-wt
           git add -A
           git commit -m "Données du $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "Aucun changement"
@@ -85,7 +100,7 @@ jobs:
       - name: Ajouter les données au site
         run: |
           mkdir -p client/dist/data
-          cp data/static/jobs.json data/static/descriptions.json client/dist/data/
+          cp -r data/static/jobs.json data/static/descriptions client/dist/data/
 
       - name: Déployer le site sur la branche gh-pages
         run: |

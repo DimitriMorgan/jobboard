@@ -25,7 +25,7 @@ const serverApi = {
   },
   job: (id) => http(`/api/jobs/${encodeURIComponent(id)}`),
   updateJob: (id, patch) => http(`/api/jobs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  refresh: (only) => http('/api/refresh', { method: 'POST', body: JSON.stringify({ only: only?.join(',') || '' }) }),
+  refresh: (only, { manualUrls = [] } = {}) => http('/api/refresh', { method: 'POST', body: JSON.stringify({ only: only?.join(',') || '', manualUrls }) }),
   refreshStatus: () => http('/api/refresh/status'),
   manualLinks: (tech, contract) => http(`/api/manual-links?tech=${tech}&contract=${contract || ''}`),
 };
@@ -44,7 +44,7 @@ export const STATUS_LABELS = {
   ignore: 'Ignoré',
 };
 
-export const CONTRACT_LABELS = { freelance: 'Freelance', cdi: 'CDI', cdd: 'CDD', interim: 'Intérim', alternance: 'Alternance', stage: 'Stage', autre: 'Autre' };
+export const CONTRACT_LABELS = { freelance: 'Freelance', cdi: 'CDI', cdd: 'CDD', interim: 'Intérim', alternance: 'Alternance', stage: 'Stage', autre: 'Non précisé' };
 export const REMOTE_LABELS = { full: 'Full remote', partial: 'Télétravail partiel', none: 'Sur site' };
 
 const fmtN = (n) => Math.round(n).toLocaleString('fr-FR');

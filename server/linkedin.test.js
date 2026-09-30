@@ -39,4 +39,7 @@ test('LinkedIn : fenêtre de recherche adaptée au dernier passage', () => {
   assert.equal(searchWindowSeconds('2026-09-29T10:00:00Z', now), 30 * 3600);
   assert.equal(searchWindowSeconds('2026-09-30T09:00:00Z', now), 86400);
   assert.equal(searchWindowSeconds('2026-09-01T10:00:00Z', now), 7 * 86400);
+  // Rattrapage : peu d'offres LinkedIn découvertes cette semaine → 7 jours
+  assert.equal(searchWindowSeconds('2026-09-30T09:00:00Z', now, 120), 7 * 86400);
+  assert.equal(searchWindowSeconds('2026-09-30T09:00:00Z', now, 5000), 86400);
 });

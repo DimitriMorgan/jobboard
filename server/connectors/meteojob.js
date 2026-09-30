@@ -35,7 +35,7 @@ function toRaw(o) {
     sourceId: o.id,
     title: o.title,
     company,
-    location: [loc.name, loc.admin2Code ? `(${loc.admin2Code})` : ''].filter(Boolean).join(' '),
+    location: loc.name && /\(\d{2,3}\)/.test(loc.name) ? loc.name : [loc.name, loc.admin2Code ? `(${loc.admin2Code})` : ''].filter(Boolean).join(' '),
     countryHint: !loc.countryCode || loc.countryCode === 'FR' ? 'FR' : undefined,
     contractHints: contractFromLabel(contractLabels),
     remoteHint: remoteFromLabel(telework),

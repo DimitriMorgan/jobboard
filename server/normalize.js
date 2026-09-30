@@ -90,6 +90,22 @@ export function inferContracts({ hints = [], title = '', description = '' }) {
   return CONTRACTS.filter((c) => set.has(c));
 }
 
+/**
+ * Contrat quand la source ne donne qu'une information faible (« temps plein ») :
+ * indication forte de la source > mention explicite dans la description > titre > motifs généraux > indication faible.
+ */
+export function resolveContracts({ title = '', description = '', strong = [], weak = [] }) {
+  const pick = (list) => CONTRACTS.filter((c) => list.includes(c) && c !== 'autre');
+  if (pick(strong).length) return pick(strong);
+  const explicit = explicitContracts(description);
+  if (explicit.length) return pick(explicit);
+  const fromTitle = CONTRACT_PATTERNS.filter(([, re]) => re.test(title)).map(([id]) => id);
+  if (fromTitle.length) return pick(fromTitle);
+  const broad = inferContracts({ title: '', description });
+  if (!(broad.length === 1 && broad[0] === 'autre')) return broad;
+  return pick(weak);
+}
+
 export function inferRemote({ hint, text = '' }) {
   if (hint === 'full' || hint === 'partial' || hint === 'none') return hint;
   if (/\bfull[- ]?remote\b|\b100 ?% (?:remote|t[ée]l[ée]travail)\b|\bt[ée]l[ée]travail (?:total|complet|int[ée]gral|100)\b|\bfully remote\b|\bremote[- ]first\b|\bwork from anywhere\b/i.test(text)) return 'full';
@@ -199,6 +215,8 @@ export function normalizeJob(source, raw) {
   const company = cleanText(raw.company) || 'Entreprise non précisée';
   const salaryText = cleanText(raw.salary) || (raw.salaryParts ? formatSalary(raw.salaryParts) : '');
   const comp = extractCompensation({ salaryText, title, description: descriptionText, structured: raw.compensation || {} });
+  // Un taux journalier (TJM) signifie une mission freelance / en régie, même si la source annonce « temps plein ».
+  if (comp.tjmMin != null && !contracts.includes('freelance')) contracts.splice(0, contracts.length, ...CONTRACTS.filter((c) => c === 'freelance' || (c !== 'autre' && contracts.includes(c))));
   const salary = [formatTjm(comp.tjmMin, comp.tjmMax, comp.currency || '€'), formatAnnual(comp.salaryMin, comp.salaryMax, comp.currency || '€')].filter(Boolean).join(' · ') || salaryText;
 
   return {
@@ -236,18 +254,21 @@ export function normalizeJob(source, raw) {
  */
 export function repairJob(job) {
   const text = htmlToText(job.description || '');
-  if (!text) return null;
   let changed = false;
   let contracts = job.contracts;
-  if (!contracts.length || (contracts.length === 1 && contracts[0] === 'autre')) {
+  if (text && (!contracts.length || (contracts.length === 1 && contracts[0] === 'autre'))) {
     const inferred = inferContracts({ title: job.title, description: text });
     if (!(inferred.length === 1 && inferred[0] === 'autre')) {
       contracts = inferred;
       changed = true;
     }
   }
+  if (job.tjmMin != null && !contracts.includes('freelance')) {
+    contracts = CONTRACTS.filter((c) => c === 'freelance' || (c !== 'autre' && contracts.includes(c)));
+    changed = true;
+  }
   let remote = job.remote;
-  if (remote == null) {
+  if (text && remote == null) {
     const r = inferRemote({ text: `${job.title}\n${job.location || ''}\n${text.slice(0, 2000)}` });
     if (r) {
       remote = r;
@@ -255,7 +276,7 @@ export function repairJob(job) {
     }
   }
   let { tjmMin, tjmMax, salaryMin, salaryMax, currency, salary } = job;
-  if (tjmMin == null && salaryMin == null) {
+  if (text && tjmMin == null && salaryMin == null) {
     const comp = extractCompensation({ salaryText: job.salary || '', title: job.title, description: text });
     if (comp.tjmMin != null || comp.salaryMin != null) {
       ({ tjmMin, tjmMax, salaryMin, salaryMax } = comp);
@@ -264,5 +285,11 @@ export function repairJob(job) {
       changed = true;
     }
   }
-  return changed ? { contracts, remote, tjmMin, tjmMax, salaryMin, salaryMax, currency, salary: salary || '' } : null;
+  // Lieu erroné (reprise de l'intitulé par une ancienne heuristique) : effacé.
+  let location = job.location || '';
+  if (location.length > 25 && (job.title || '').includes(location)) {
+    location = '';
+    changed = true;
+  }
+  return changed ? { contracts, remote, tjmMin, tjmMax, salaryMin, salaryMax, currency, salary: salary || '', location } : null;
 }

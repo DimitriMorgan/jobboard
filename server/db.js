@@ -210,12 +210,12 @@ export function openDb(dbPath) {
     /** Offres déjà en base pour une source : infos utiles aux connecteurs pour décider d'aller chercher le détail. */
     knownJobs(source) {
       const rows = db
-        .prepare(`SELECT source_id, title, company, location, url, contracts, tags, last_seen_at, length(COALESCE(description, '')) AS desc_len FROM jobs WHERE source = ?`)
+        .prepare(`SELECT source_id, title, company, location, url, contracts, tags, first_seen_at, last_seen_at, length(COALESCE(description, '')) AS desc_len FROM jobs WHERE source = ?`)
         .all(source);
       return new Map(
         rows.map((r) => [
           r.source_id,
-          { sourceId: r.source_id, title: r.title, company: r.company, location: r.location, url: r.url, contracts: parse(r.contracts, []), tags: parse(r.tags, []), lastSeenAt: r.last_seen_at, descLen: r.desc_len },
+          { sourceId: r.source_id, title: r.title, company: r.company, location: r.location, url: r.url, contracts: parse(r.contracts, []), tags: parse(r.tags, []), firstSeenAt: r.first_seen_at, lastSeenAt: r.last_seen_at, descLen: r.desc_len },
         ]),
       );
     },
@@ -308,9 +308,9 @@ export function openDb(dbPath) {
       try {
         for (const j of rows) {
           stmt.run(
-            j.id, j.source, j.sourceId, j.title, j.company, j.location, j.country, j.remote, JSON.stringify(j.contracts || []), JSON.stringify(j.techs || []), j.salary,
+            j.id, j.source, j.sourceId, j.title, j.company ?? null, j.location ?? null, j.country ?? null, j.remote ?? null, JSON.stringify(j.contracts || []), JSON.stringify(j.techs || []), j.salary ?? null,
             j.tjmMin ?? null, j.tjmMax ?? null, j.salaryMin ?? null, j.salaryMax ?? null, j.currency ?? null, j.url, j.applyUrl ?? null, j.publishedAt ?? null, j.description || '', j.excerpt || '',
-            JSON.stringify(j.tags || []), j.fingerprint, j.firstSeenAt, j.lastSeenAt, j.firstRunId ?? null, j.status || 'nouveau', j.notes || '', j.favorite ? 1 : 0, j.statusUpdatedAt ?? null,
+            JSON.stringify(j.tags || []), j.fingerprint ?? null, j.firstSeenAt, j.lastSeenAt, j.firstRunId ?? null, j.status || 'nouveau', j.notes || '', j.favorite ? 1 : 0, j.statusUpdatedAt ?? null,
           );
         }
         db.exec('COMMIT');
@@ -343,10 +343,12 @@ export function openDb(dbPath) {
     repairIncomplete(repairFn) {
       const rows = db
         .prepare(
-          `SELECT * FROM jobs WHERE length(COALESCE(description, '')) > 40 AND (contracts = '["autre"]' OR remote IS NULL OR (tjm_min IS NULL AND salary_min IS NULL))`,
+          `SELECT * FROM jobs WHERE (length(COALESCE(description, '')) > 40 AND (contracts = '["autre"]' OR remote IS NULL OR (tjm_min IS NULL AND salary_min IS NULL)))
+             OR (tjm_min IS NOT NULL AND contracts NOT LIKE '%"freelance"%')
+             OR (length(COALESCE(location, '')) > 25 AND instr(title, location) > 0)`,
         )
         .all();
-      const upd = db.prepare('UPDATE jobs SET contracts = ?, remote = ?, tjm_min = ?, tjm_max = ?, salary_min = ?, salary_max = ?, currency = ?, salary = ? WHERE id = ?');
+      const upd = db.prepare('UPDATE jobs SET contracts = ?, remote = ?, tjm_min = ?, tjm_max = ?, salary_min = ?, salary_max = ?, currency = ?, salary = ?, location = ? WHERE id = ?');
       let repaired = 0;
       db.exec('BEGIN');
       try {
@@ -354,7 +356,7 @@ export function openDb(dbPath) {
           const job = rowToJob(row, null);
           const fixed = repairFn(job);
           if (!fixed) continue;
-          upd.run(JSON.stringify(fixed.contracts), fixed.remote, fixed.tjmMin, fixed.tjmMax, fixed.salaryMin, fixed.salaryMax, fixed.currency, fixed.salary, row.id);
+          upd.run(JSON.stringify(fixed.contracts), fixed.remote ?? null, fixed.tjmMin ?? null, fixed.tjmMax ?? null, fixed.salaryMin ?? null, fixed.salaryMax ?? null, fixed.currency ?? null, fixed.salary ?? '', fixed.location ?? '', row.id);
           repaired++;
         }
         db.exec('COMMIT');

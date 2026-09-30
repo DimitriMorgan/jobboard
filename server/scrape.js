@@ -81,8 +81,8 @@ export function parseFrenchDate(text, now = new Date()) {
   const day = 86400e3;
   if (/aujourd|à l'instant|il y a \d+ ?(?:min|h|heure)/.test(t)) return new Date(now).toISOString();
   if (/\bhier\b/.test(t)) return new Date(now - day).toISOString();
-  let m = t.match(/il y a (\d+) ?(jour|semaine|mois)/);
-  if (m) return new Date(now - Number(m[1]) * (m[2] === 'jour' ? day : m[2] === 'semaine' ? 7 * day : 30 * day)).toISOString();
+  let m = t.match(/il y a (\d+) ?(jours?|j\b|semaines?|sem\.?|mois)/);
+  if (m) return new Date(now - Number(m[1]) * (/^j/.test(m[2]) ? day : /^sem/.test(m[2]) ? 7 * day : 30 * day)).toISOString();
   m = t.match(/(\d{1,2})(?:er)? (janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)(?: (\d{4}))?/);
   if (m) {
     const month = MONTHS[m[2]] ?? MONTHS[m[2].normalize('NFD').replace(/[̀-ͯ]/g, '')];
@@ -122,7 +122,7 @@ export function remoteFromLabel(label) {
  * Complète des offres avec la fiche JSON-LD de leur page (description, contrat, salaire…),
  * pour les offres nouvelles ou encore sans description. Renvoie le nombre de fiches lues.
  */
-export async function fillFromJsonLd(jobs, ctx, { limit = 40, concurrency = 3, urlOf = (j) => j.url, keep = () => true, getText } = {}) {
+export async function fillFromJsonLd(jobs, ctx, { limit = 40, concurrency = 3, urlOf = (j) => j.url, keep = () => true, getText, fillCompany = true } = {}) {
   const todo = jobs.filter((j) => keep(j) && (!ctx?.needsDetail || ctx.needsDetail(j.sourceId))).slice(0, limit);
   let done = 0;
   let next = 0;
@@ -140,7 +140,7 @@ export async function fillFromJsonLd(jobs, ctx, { limit = 40, concurrency = 3, u
           if (!job.compensation && d.compensation) job.compensation = d.compensation;
           job.publishedAt = job.publishedAt || d.publishedAt;
           job.location = job.location || d.location;
-          job.company = job.company || d.company;
+          if (fillCompany) job.company = job.company || d.company;
           done++;
         } catch {
           /* fiche indisponible : on garde la version courte */

@@ -5,6 +5,7 @@ import { tracking } from '../tracking.js';
 import { getSettings } from '../settings.js';
 import { dispatchWorkflow, latestWorkflowRun } from '../github.js';
 import { manualLinks } from '../../../shared/manualLinks.js';
+import { descriptionShardFile } from '../../../shared/shard.js';
 
 const BASE = import.meta.env.BASE_URL || '/';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -18,12 +19,14 @@ const FALLBACK_META = {
 };
 
 let data = null;
-let descriptions = null;
+// Fichiers de descriptions déjà demandés (chemin → promesse du contenu) : chaque fichier n'est chargé qu'une fois.
+const descriptionFiles = new Map();
 let dataError = null;
 const state = { running: false, startedAt: null, finishedAt: null, sources: {}, totals: { seen: 0, new: 0 }, message: '', runUrl: null, error: null, static: true };
 
-async function fetchJson(file, force) {
-  const res = await fetch(`${BASE}data/${file}${force ? `?t=${Date.now()}` : ''}`, { cache: force ? 'no-store' : 'default' });
+async function fetchJson(file, force, version) {
+  const query = force ? `?t=${Date.now()}` : version ? `?v=${encodeURIComponent(version)}` : '';
+  const res = await fetch(`${BASE}data/${file}${query}`, { cache: force ? 'no-store' : 'default' });
   if (!res.ok) {
     const err = new Error(res.status === 404 ? 'Aucune donnée publiée pour l’instant : lancez le workflow « Actualiser les offres » depuis l’onglet Actions de GitHub (ou le bouton Actualiser une fois le jeton configuré).' : `Erreur de chargement des données (${res.status})`);
     err.status = res.status;
@@ -37,7 +40,7 @@ async function loadData(force = false) {
   try {
     data = await fetchJson('jobs.json', force);
     dataError = null;
-    if (force) descriptions = null;
+    if (force) descriptionFiles.clear();
   } catch (err) {
     dataError = err;
     if (!data) throw err;
@@ -45,9 +48,22 @@ async function loadData(force = false) {
   return data;
 }
 
-async function loadDescriptions() {
-  if (!descriptions) descriptions = await fetchJson('descriptions.json', true).catch(() => ({}));
-  return descriptions;
+/**
+ * Description d'une offre. Les descriptions sont réparties en plusieurs fichiers (`descriptionShards`) :
+ * seul celui de l'offre est téléchargé. Les données plus anciennes n'ont qu'un fichier descriptions.json.
+ * L'URL porte la date de publication des données : le cache du navigateur sert tant qu'elles n'ont pas changé.
+ */
+async function loadDescription(d, id) {
+  const file = d.descriptionShards ? descriptionShardFile(id, d.descriptionShards) : 'descriptions.json';
+  if (!descriptionFiles.has(file)) {
+    const pending = fetchJson(file, false, d.generatedAt).catch(() => {
+      if (descriptionFiles.get(file) === pending) descriptionFiles.delete(file); // échec réseau : on réessaiera à la prochaine ouverture
+      return {};
+    });
+    descriptionFiles.set(file, pending);
+  }
+  const descs = await descriptionFiles.get(file);
+  return descs[id] || '';
 }
 
 function withTracking(job) {
@@ -102,9 +118,9 @@ export const api = {
       if (!ghost) throw new Error('Offre introuvable');
       return { ...ghost, description: '', duplicates: [] };
     }
-    const descs = await loadDescriptions();
+    const description = await loadDescription(d, id);
     job = withTracking(job);
-    job.description = descs[id] || '';
+    job.description = description;
     job.duplicates = d.jobs.filter((j) => j.fingerprint === job.fingerprint && j.id !== job.id).map(({ id, source, url }) => ({ id, source, url }));
     return job;
   },
@@ -140,7 +156,7 @@ export const api = {
         withTjm: jobs.filter((j) => j.tjmMin != null).length,
         withSalary: jobs.filter((j) => j.salaryMin != null).length,
       },
-      latestRun: d.latestRun ? { id: d.latestRun.id, finished_at: d.latestRun.finishedAt || d.generatedAt, started_at: d.latestRun.startedAt } : null,
+      latestRun: d.latestRun ? { id: d.latestRun.id, finished_at: d.generatedAt || d.latestRun.finishedAt, started_at: d.latestRun.startedAt } : null,
       generatedAt: d.generatedAt,
     };
   },
@@ -154,8 +170,13 @@ export const api = {
 
   refreshStatus: async () => ({ ...state }),
 
-  async refresh() {
+  /**
+   * Déclenche le workflow GitHub. `only` : sources à actualiser (actualisation partielle, rapide) ;
+   * `manualUrls` : posts / offres LinkedIn à ajouter.
+   */
+  async refresh(only, { manualUrls = [] } = {}) {
     if (state.running) return { ...state };
+    const partial = !!(only?.length || manualUrls.length);
     const cfg = getSettings();
     if (!cfg.token || !cfg.repo) {
       const err = new Error('Pour actualiser depuis le site, renseignez un jeton GitHub dans l’onglet Sources → Paramètres. Sinon, lancez le workflow « Actualiser les offres » depuis l’onglet Actions du dépôt GitHub.');
@@ -164,16 +185,28 @@ export const api = {
     }
     const before = data?.generatedAt || null;
     Object.assign(state, { running: true, startedAt: new Date().toISOString(), finishedAt: null, message: 'Déclenchement du workflow GitHub…', runUrl: null, error: null });
-    await dispatchWorkflow(cfg);
+    const inputs = partial ? { sources: (only || []).join(','), linkedin_urls: manualUrls.join(' ') } : undefined;
+    try {
+      await dispatchWorkflow(cfg, inputs);
+    } catch (err) {
+      state.running = false;
+      if (err.status === 422 && inputs) err.message = `${err.message} — le workflow du dépôt ne connaît pas encore les paramètres d’ajout : attendez la prochaine publication du site ou relancez-le une fois depuis GitHub.`;
+      throw err;
+    }
     (async () => {
       try {
         await sleep(6000);
         let run = null;
-        for (let i = 0; i < 80; i++) {
+        for (let i = 0; i < 360; i++) {
           run = await latestWorkflowRun(cfg).catch(() => null);
-          if (run && run.created_at >= state.startedAt) {
+          if (run && run.created_at >= state.startedAt.slice(0, 19)) {
             state.runUrl = run.html_url;
-            state.message = run.status === 'completed' ? `Workflow terminé (${run.conclusion})` : `Workflow GitHub en cours (${run.status})… les 16 sources sont interrogées, comptez 2 à 5 minutes.`;
+            state.message =
+              run.status === 'completed'
+                ? `Workflow terminé (${run.conclusion})`
+                : partial
+                  ? `Ajout en cours sur GitHub (${run.status})… comptez 1 à 2 minutes.`
+                  : `Workflow GitHub en cours (${run.status})… toutes les sources sont interrogées, LinkedIn compris : comptez 30 à 40 minutes.`;
             if (run.status === 'completed') break;
           } else state.message = 'En attente du démarrage du workflow…';
           await sleep(10000);

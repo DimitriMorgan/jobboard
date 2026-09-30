@@ -6,6 +6,8 @@ import JobList from './components/JobList.jsx';
 import JobDetail from './components/JobDetail.jsx';
 import SourcesPanel from './components/SourcesPanel.jsx';
 import TrackingBoard from './components/TrackingBoard.jsx';
+import AddLinkedin from './components/AddLinkedin.jsx';
+import { groupDuplicates } from './dedupe.js';
 
 const FILTERS_KEY = 'jobboard.filters.v1';
 
@@ -29,6 +31,8 @@ export default function App() {
   const [tab, setTab] = useState('offres');
   const [refresh, setRefresh] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [addOpen, setAddOpen] = useState(() => (location.hash.startsWith('#add=') ? decodeURIComponent(location.hash.slice(5)) : null));
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -52,12 +56,28 @@ export default function App() {
     localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
   }, [filters]);
 
+  // Favori « Ajouter au JobBoard » : #add=<url> ouvre le dialogue pré-rempli, y compris si le site est déjà ouvert.
+  useEffect(() => {
+    const onHash = () => {
+      if (location.hash.startsWith('#add=')) setAddOpen(decodeURIComponent(location.hash.slice(5)));
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const [hiddenUnknown, setHiddenUnknown] = useState(0);
   const loadJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ jobs }, stats] = await Promise.all([api.jobs(filters), api.stats()]);
+      const hidesUnknown = filters.contracts.length > 0 && !filters.contracts.includes('autre');
+      const [{ jobs }, stats, unknown] = await Promise.all([
+        api.jobs(filters),
+        api.stats(),
+        hidesUnknown ? api.jobs({ ...filters, contracts: ['autre'], limit: 5000 }) : Promise.resolve({ count: 0 }),
+      ]);
       setJobs(jobs);
       setStats(stats);
+      setHiddenUnknown(unknown.count || 0);
       setError('');
     } catch (e) {
       setError(e.message);
@@ -96,16 +116,28 @@ export default function App() {
     }, 1500);
   }
 
-  async function onRefresh(only) {
+  async function onRefresh(only, opts) {
     try {
-      const s = await api.refresh(only);
+      const s = await api.refresh(only, opts);
       setRefresh(s);
       startPolling();
+      return true;
     } catch (e) {
       setError(e.message);
       if (e.code === 'NO_TOKEN') setTab('sources');
+      return false;
     }
   }
+
+  async function onAddLinkedin(urls) {
+    const ok = await onRefresh(['linkedin-posts'], { manualUrls: urls });
+    if (!ok) return;
+    setAddOpen(null);
+    if (location.hash.startsWith('#add=')) history.replaceState(null, '', location.pathname + location.search);
+    setNotice(`${urls.length} lien${urls.length > 1 ? 's' : ''} LinkedIn envoyé${urls.length > 1 ? 's' : ''} : les offres apparaîtront avec le badge « Nouveau » (source « Posts LinkedIn »).`);
+  }
+
+  const shown = useMemo(() => groupDuplicates(jobs), [jobs]);
 
   async function onUpdate(id, patch) {
     const updated = await api.updateJob(id, patch);
@@ -154,6 +186,9 @@ export default function App() {
           ) : (
             <span className="muted small">Aucune actualisation pour l'instant</span>
           )}
+          <button className="secondary-btn" disabled={running} onClick={() => setAddOpen('')} title="Ajouter un post ou une offre vus dans votre fil LinkedIn">
+            ＋ Post LinkedIn
+          </button>
           <button className="primary refresh-btn" disabled={running} onClick={() => onRefresh()}>
             {running ? (
               <>
@@ -169,6 +204,11 @@ export default function App() {
       {error ? (
         <div className="banner error">
           {error} <button onClick={() => setError('')}>×</button>
+        </div>
+      ) : null}
+      {notice && !error ? (
+        <div className="banner progress">
+          {notice} <button onClick={() => setNotice('')}>×</button>
         </div>
       ) : null}
       {running && refresh?.message ? (
@@ -205,7 +245,13 @@ export default function App() {
           <main className="content">
             <div className="list-header">
               <span>
-                {loading ? 'Chargement…' : `${jobs.length} offre${jobs.length > 1 ? 's' : ''}`}
+                {loading ? 'Chargement…' : `${shown.length} offre${shown.length > 1 ? 's' : ''}`}
+                {!loading && shown.length < jobs.length ? <span className="muted small"> ({jobs.length - shown.length} doublon{jobs.length - shown.length > 1 ? 's' : ''} regroupé{jobs.length - shown.length > 1 ? 's' : ''})</span> : null}
+                {!loading && hiddenUnknown > 0 ? (
+                  <button className="link small" title="Offres dont le type de contrat n'est pas encore connu (fiche non lue ou non indiquée)" onClick={() => setFilters({ ...filters, contracts: [...filters.contracts, 'autre'] })}>
+                    + {hiddenUnknown} au contrat non précisé
+                  </button>
+                ) : null}
                 {stats?.newCount ? <span className="pill new"> {stats.newCount} nouvelle{stats.newCount > 1 ? 's' : ''} depuis la dernière actualisation</span> : null}
               </span>
               <label className="sort">
@@ -219,12 +265,13 @@ export default function App() {
                 </select>
               </label>
             </div>
-            <JobList jobs={jobs} meta={meta} selectedId={selectedId} onSelect={setSelectedId} onUpdate={onUpdate} />
+            <JobList jobs={shown} meta={meta} selectedId={selectedId} onSelect={setSelectedId} onUpdate={onUpdate} />
           </main>
         </div>
       )}
 
       {selected ? <JobDetail job={selected} meta={meta} onClose={() => setSelectedId(null)} onUpdate={onUpdate} /> : null}
+      {addOpen != null ? <AddLinkedin initial={addOpen} isStatic={api.isStatic} onSubmit={onAddLinkedin} onClose={() => setAddOpen(null)} /> : null}
     </div>
   );
 }

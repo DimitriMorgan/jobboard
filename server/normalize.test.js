@@ -69,3 +69,13 @@ test('contrat cité explicitement dans la description', () => {
   assert.deepEqual(c('Nous cherchons un profil passionné pour rejoindre notre équipe produit.'), ['autre']);
   assert.deepEqual(inferContracts({ hints: ['autre'], title: 'Dev', description: 'Poste en CDI' }), ['cdi']);
 });
+
+test('contrat résolu par ordre de fiabilité, TJM ⇒ freelance', async () => {
+  const { resolveContracts } = await import('./normalize.js');
+  assert.deepEqual(resolveContracts({ title: 'Développeur Node.js - Mission à Lille', description: 'Rejoignez-nous', strong: [], weak: ['cdi'] }), ['freelance']);
+  assert.deepEqual(resolveContracts({ title: 'Développeur Node.js', description: 'Type de contrat : CDI. Mission : développer…', weak: ['cdi'] }), ['cdi']);
+  assert.deepEqual(resolveContracts({ title: 'Développeur', description: 'Rien', strong: ['freelance'], weak: ['cdi'] }), ['freelance']);
+  assert.deepEqual(resolveContracts({ title: 'Développeur', description: 'Rien', weak: ['cdi'] }), ['cdi']);
+  const job = normalizeJob('hellowork', { sourceId: '1', title: 'Développeur Back-End Node.Js - Refad950 H/F', company: 'Teolia', url: 'https://x/1', contractHints: ['cdi'], compensation: { tjmMin: 420, tjmMax: 420 }, descriptionText: 'Node.js' });
+  assert.deepEqual(job.contracts, ['freelance', 'cdi']);
+});

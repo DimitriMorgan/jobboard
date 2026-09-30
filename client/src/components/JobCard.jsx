@@ -34,6 +34,11 @@ export default function JobCard({ job, meta, selected, onSelect, onUpdate }) {
             </span>
           ))}
           <span className="badge source">{source?.name || job.source}</span>
+          {(job.alsoOn || []).map((o) => (
+            <a key={o.id} className="badge source also" href={o.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title="Même offre sur un autre site">
+              + {meta?.sources?.find((s) => s.id === o.source)?.name || o.source}
+            </a>
+          ))}
           {!job.stillListed ? <span className="badge stale">Non revue depuis 7 j</span> : null}
         </div>
       </div>
