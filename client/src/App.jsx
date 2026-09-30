@@ -10,6 +10,8 @@ import AddLinkedin from './components/AddLinkedin.jsx';
 import { groupDuplicates } from './dedupe.js';
 
 const FILTERS_KEY = 'jobboard.filters.v1';
+// Toutes les offres filtrées sont chargées (la liste les dessine par tranches) : pas de plafond silencieux.
+const LIST_LIMIT = 50000;
 
 function loadFilters() {
   try {
@@ -71,9 +73,9 @@ export default function App() {
     try {
       const hidesUnknown = filters.contracts.length > 0 && !filters.contracts.includes('autre');
       const [{ jobs }, stats, unknown] = await Promise.all([
-        api.jobs(filters),
+        api.jobs({ ...filters, limit: LIST_LIMIT }),
         api.stats(),
-        hidesUnknown ? api.jobs({ ...filters, contracts: ['autre'], limit: 5000 }) : Promise.resolve({ count: 0 }),
+        hidesUnknown ? api.jobs({ ...filters, contracts: ['autre'], limit: LIST_LIMIT }) : Promise.resolve({ count: 0 }),
       ]);
       setJobs(jobs);
       setStats(stats);
@@ -265,7 +267,7 @@ export default function App() {
                 </select>
               </label>
             </div>
-            <JobList jobs={shown} meta={meta} selectedId={selectedId} onSelect={setSelectedId} onUpdate={onUpdate} />
+            <JobList key={JSON.stringify(filters)} jobs={shown} meta={meta} selectedId={selectedId} onSelect={setSelectedId} onUpdate={onUpdate} />
           </main>
         </div>
       )}
