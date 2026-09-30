@@ -55,7 +55,13 @@ test('Posts LinkedIn : URL, date, tri offre / candidat, titre', () => {
     id: '7348282755333451776',
     url: 'https://www.linkedin.com/posts/chrisscholly_je-cherche-activity-7348282755333451776-dCAQ',
   });
-  assert.equal(parseLinkedinUrl('https://www.linkedin.com/feed/update/urn:li:activity:7348282755333451776/').kind, 'post');
+  assert.deepEqual(parseLinkedinUrl('https://www.linkedin.com/feed/update/urn:li:activity:7348282755333451776/?actorCompanyId=1'), {
+    kind: 'post',
+    id: '7348282755333451776',
+    url: 'https://www.linkedin.com/feed/update/urn:li:activity:7348282755333451776/',
+  });
+  assert.equal(parseLinkedinUrl('https://www.linkedin.com/feed/update/urn:li:ugcPost:7348282754322456576/').url, 'https://www.linkedin.com/feed/update/urn:li:ugcPost:7348282754322456576/');
+  assert.equal(parseLinkedinUrl('https://www.linkedin.com/feed/update/urn%3Ali%3Ashare%3A7348282754322456577').url, 'https://www.linkedin.com/feed/update/urn:li:share:7348282754322456577/');
   assert.deepEqual(parseLinkedinUrl('https://www.linkedin.com/jobs/view/developpeur-react-at-acme-4472713483/'), { kind: 'job', id: '4472713483', url: 'https://www.linkedin.com/jobs/view/4472713483/' });
   assert.equal(parseLinkedinUrl('https://example.com'), null);
   assert.equal(splitUrls('https://www.linkedin.com/jobs/view/4472713483 https://www.linkedin.com/jobs/view/4472713483/').length, 1);

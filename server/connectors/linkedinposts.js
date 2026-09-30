@@ -26,7 +26,14 @@ export function parseLinkedinUrl(input) {
   const s = String(input || '').trim();
   let m = s.match(/linkedin\.com\/posts\/[^?#\s]*?activity-(\d{15,20})[^?#\s]*/i);
   if (m) return { kind: 'post', id: m[1], url: `https://www.linkedin.com/posts/${s.split('/posts/')[1].split(/[?#\s]/)[0]}` };
-  m = s.match(/urn:li:(?:activity|share|ugcPost):(\d{15,20})/i) || s.match(/linkedin\.com\/feed\/update\/[^\s]*?(\d{15,20})/i);
+  // Post ouvert depuis le fil (clic sur la date) ou une notification : on garde le type d'URN, l'identifiant
+  // d'un ugcPost ou d'un share n'est pas celui de l'activité. Les « : » sont parfois encodés (%3A).
+  m = s.match(/urn(?::|%3A)li(?::|%3A)(activity|share|ugcPost)(?::|%3A)(\d{15,20})/i);
+  if (m) {
+    const type = { activity: 'activity', share: 'share', ugcpost: 'ugcPost' }[m[1].toLowerCase()];
+    return { kind: 'post', id: m[2], url: `https://www.linkedin.com/feed/update/urn:li:${type}:${m[2]}/` };
+  }
+  m = s.match(/linkedin\.com\/feed\/update\/[^\s]*?(\d{15,20})/i);
   if (m) return { kind: 'post', id: m[1], url: `https://www.linkedin.com/feed/update/urn:li:activity:${m[1]}/` };
   m = s.match(/linkedin\.com\/jobs\/view\/(?:[^/?#\s]*-)?(\d{8,})/i) || s.match(/currentJobId=(\d{8,})/i);
   if (m) return { kind: 'job', id: m[1], url: `https://www.linkedin.com/jobs/view/${m[1]}/` };
