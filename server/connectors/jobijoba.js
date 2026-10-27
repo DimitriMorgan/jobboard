@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 import { getText, sleep } from '../http.js';
 import { contractFromLabel, remoteFromLabel, parseFrenchDate } from '../scrape.js';
 
-const QUERIES = ['développeur react', 'développeur node', 'développeur javascript', 'développeur php', 'développeur symfony', 'développeur .net', 'freelance développeur'];
+const QUERIES = ['développeur react', 'développeur node', 'développeur javascript', 'développeur php', 'développeur symfony', 'freelance développeur'];
 
 export function parseJobijoba(html, now = new Date()) {
   const $ = cheerio.load(html);

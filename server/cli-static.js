@@ -5,7 +5,7 @@ import { openDb } from './db.js';
 import { createRefresher } from './refresh.js';
 import { exportStatic, importStatic } from './staticData.js';
 import { loadEnv } from './env.js';
-import { repairJob } from './normalize.js';
+import { repairJob, isExcludedJob, htmlToText } from './normalize.js';
 
 loadEnv();
 const dir = path.resolve(process.argv[2] || process.env.STATIC_DATA_DIR || 'data/static');
@@ -14,6 +14,8 @@ const retentionDays = Number(process.env.RETENTION_DAYS) || 60;
 const db = openDb(':memory:');
 const imported = importStatic(db, dir);
 console.log(`Données précédentes : ${imported} offres (${dir})`);
+const dropped = db.dropTech('dotnet', (title, html) => isExcludedJob(title, htmlToText(html)));
+if (dropped.removed || dropped.updated) console.log(`.NET / C# retiré : ${dropped.removed} offres supprimées, ${dropped.updated} offres mises à jour`);
 const repaired = db.repairIncomplete(repairJob);
 if (repaired) console.log(`Offres complétées depuis leur description (contrat, télétravail, rémunération) : ${repaired}`);
 

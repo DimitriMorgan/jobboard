@@ -1,5 +1,5 @@
 // Plateformes sans API exploitable (anti-bot, connexion requise…) : liens de recherche directs, par techno et contrat.
-const KW = { javascript: 'javascript', react: 'react', php: 'php', nodejs: 'node.js', dotnet: '.net' };
+const KW = { javascript: 'javascript', react: 'react', php: 'php', nodejs: 'node.js' };
 
 export const MANUAL_PLATFORMS = [
   { id: 'linkedin-search', name: 'LinkedIn (recherche connectée, dernières 24 h)', build: (k, c) => `https://www.linkedin.com/jobs/search/?keywords=${enc(k)}&location=France&f_TPR=r86400${c === 'freelance' ? '&f_JT=C' : c === 'cdi' ? '&f_JT=F' : ''}` },

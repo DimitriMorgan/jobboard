@@ -20,12 +20,10 @@ export const LINKEDIN_QUERIES = [
   { keywords: 'react', tech: 'react', maxPages: 40 },
   { keywords: 'node.js', tech: 'nodejs', maxPages: 40 },
   { keywords: 'php', tech: 'php', maxPages: 25 },
-  { keywords: '.net', tech: 'dotnet', maxPages: 30 },
   { keywords: 'javascript', tech: 'javascript', maxPages: 50 },
-  { keywords: 'freelance (react OR node OR javascript OR typescript OR php OR symfony OR laravel OR ".net" OR "c#")', tech: null, maxPages: 30 },
+  { keywords: 'freelance (react OR node OR javascript OR typescript OR php OR symfony OR laravel)', tech: null, maxPages: 30 },
   { keywords: 'typescript', tech: 'javascript', maxPages: 25 },
   { keywords: 'symfony', tech: 'php', maxPages: 12 },
-  { keywords: 'c#', tech: 'dotnet', maxPages: 20 },
   { keywords: 'nestjs', tech: 'nodejs', maxPages: 8 },
   { keywords: 'laravel', tech: 'php', maxPages: 8 },
 ];

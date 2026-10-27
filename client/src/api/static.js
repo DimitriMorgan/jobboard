@@ -11,7 +11,7 @@ const BASE = import.meta.env.BASE_URL || '/';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const FALLBACK_META = {
-  techs: [{ id: 'javascript', label: 'JavaScript' }, { id: 'react', label: 'React' }, { id: 'php', label: 'PHP' }, { id: 'nodejs', label: 'Node.js' }, { id: 'dotnet', label: '.NET' }],
+  techs: [{ id: 'javascript', label: 'JavaScript' }, { id: 'react', label: 'React' }, { id: 'php', label: 'PHP' }, { id: 'nodejs', label: 'Node.js' }],
   contracts: ['freelance', 'cdi', 'cdd', 'interim', 'alternance', 'stage', 'autre'],
   statuses: ['nouveau', 'vu', 'a_postuler', 'candidature_envoyee', 'relance', 'entretien', 'offre_recue', 'refus', 'ignore'],
   sources: [],

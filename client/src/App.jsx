@@ -10,13 +10,16 @@ import AddLinkedin from './components/AddLinkedin.jsx';
 import { groupDuplicates } from './dedupe.js';
 
 const FILTERS_KEY = 'jobboard.filters.v1';
+const KNOWN_TECHS = ['javascript', 'react', 'php', 'nodejs'];
 // Toutes les offres filtrées sont chargées (la liste les dessine par tranches) : pas de plafond silencieux.
 const LIST_LIMIT = 50000;
 
 function loadFilters() {
   try {
     const saved = JSON.parse(localStorage.getItem(FILTERS_KEY) || 'null');
-    return saved ? { ...DEFAULT_FILTERS, ...saved } : DEFAULT_FILTERS;
+    if (!saved) return DEFAULT_FILTERS;
+    // Technos retirées de l'agrégateur (.NET) : un filtre mémorisé dessus viderait la liste.
+    return { ...DEFAULT_FILTERS, ...saved, techs: (saved.techs || []).filter((t) => KNOWN_TECHS.includes(t)) };
   } catch {
     return DEFAULT_FILTERS;
   }
@@ -164,7 +167,7 @@ export default function App() {
           <span className="logo">◆</span>
           <div>
             <h1>JobBoard</h1>
-            <p>Freelance & CDI · JavaScript · React · PHP · Node.js · .NET</p>
+            <p>Freelance & CDI · JavaScript · React · PHP · Node.js</p>
           </div>
         </div>
         <nav className="tabs">

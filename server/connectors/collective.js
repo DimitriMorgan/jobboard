@@ -3,7 +3,7 @@ import { getText, sleep } from '../http.js';
 import { contractFromLabel } from '../scrape.js';
 
 const BASE = 'https://www.collective.work/jobs/fr';
-const QUERIES = ['react', 'node', 'javascript', 'typescript', 'php', 'symfony', 'laravel', '.net', 'c#'];
+const QUERIES = ['react', 'node', 'javascript', 'typescript', 'php', 'symfony', 'laravel'];
 const REMOTE = { REMOTE: 'full', FULL_REMOTE: 'full', HYBRID: 'partial', ON_SITE: 'none', ONSITE: 'none', OFFICE: 'none' };
 
 export function parseCollective(html) {

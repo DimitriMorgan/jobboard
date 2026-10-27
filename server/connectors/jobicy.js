@@ -1,7 +1,7 @@
 // Jobicy : API publique d'offres remote, filtrable par tag et zone géographique.
 import { getJson } from '../http.js';
 
-const TAGS = ['javascript', 'react', 'php', 'node', 'dotnet'];
+const TAGS = ['javascript', 'react', 'php', 'node'];
 
 export default {
   id: 'jobicy',

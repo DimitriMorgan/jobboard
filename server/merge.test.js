@@ -5,15 +5,15 @@ import { normalizeJob, repairJob } from './normalize.js';
 
 const detailed = {
   sourceId: '42',
-  title: 'Développeur Back-End .NET Expert H/F',
+  title: 'Développeur Back-End Node.js Expert H/F',
   company: 'Nexton',
   location: 'Paris',
   url: 'https://www.linkedin.com/jobs/view/42/',
   contractHints: ['cdi'],
   tags: ['Type d’emploi : Temps plein'],
-  descriptionHtml: `<p>${'Nous recrutons un développeur C# / .NET Core en CDI, télétravail 2 jours par semaine. '.repeat(4)} Salaire 55-65k€.</p>`,
+  descriptionHtml: `<p>${'Nous recrutons un développeur Node.js / NestJS en CDI, télétravail 2 jours par semaine. '.repeat(4)} Salaire 55-65k€.</p>`,
 };
-const listOnly = { sourceId: '42', title: 'Développeur Back-End .NET Expert H/F', company: 'Nexton', location: 'Paris', url: 'https://www.linkedin.com/jobs/view/42/', contractHints: [], techHints: ['dotnet'] };
+const listOnly = { sourceId: '42', title: 'Développeur Back-End Node.js Expert H/F', company: 'Nexton', location: 'Paris', url: 'https://www.linkedin.com/jobs/view/42/', contractHints: [], techHints: ['nodejs'] };
 
 test('une offre revue sans fiche détaillée n’écrase pas les infos de la fiche complète', () => {
   const db = openDb(':memory:');

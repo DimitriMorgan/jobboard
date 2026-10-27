@@ -1,6 +1,6 @@
 # JobBoard — agrégateur d'offres freelance & CDI
 
-Plateforme locale qui agrège les offres d'emploi **freelance et CDI** pour les technos **JavaScript, React, PHP, Node.js et .NET**, avec :
+Plateforme locale qui agrège les offres d'emploi **freelance et CDI** pour les technos **JavaScript, React, PHP et Node.js** (les offres .NET / C# sont volontairement écartées), avec :
 
 - un bouton **Actualiser** qui interroge toutes les plateformes (chacune isolée : une source en panne n'empêche pas les autres) ;
 - des **filtres** : technos, type de contrat, lieu (France / full remote), télétravail, période, source, statut de suivi, favoris, recherche libre ;
@@ -46,7 +46,7 @@ Les données sont stockées dans `data/jobboard.sqlite` (modifiable via `DB_PATH
 
 | Source | Type | Périmètre | Remarques |
 | --- | --- | --- | --- |
-| LinkedIn (offres) | Endpoint public « guest » (HTML) | France, depuis la dernière actualisation (24 h à 7 jours) | 11 requêtes (react, node.js, php, .net, javascript, typescript, symfony, c#, nestjs, laravel, freelance) en pagination profonde ; fiche de chaque nouvelle offre lue pour le type de contrat (LinkedIn ignore les filtres de contrat hors connexion). Budget : `LINKEDIN_MAX_REQUESTS` (1300), `LINKEDIN_DETAIL_LIMIT` (1000). Rythme ralenti automatiquement en cas de 429 |
+| LinkedIn (offres) | Endpoint public « guest » (HTML) | France, depuis la dernière actualisation (24 h à 7 jours) | 9 requêtes (react, node.js, php, javascript, typescript, symfony, nestjs, laravel, freelance) en pagination profonde ; fiche de chaque nouvelle offre lue pour le type de contrat (LinkedIn ignore les filtres de contrat hors connexion). Budget : `LINKEDIN_MAX_REQUESTS` (1300), `LINKEDIN_DETAIL_LIMIT` (1000). Rythme ralenti automatiquement en cas de 429 |
 | Posts LinkedIn | Posts publics (JSON-LD) | Annonces publiées en posts (« je recrute… ») | Ajout manuel depuis le site (bouton « ＋ Post LinkedIn » ou favori « Ajouter au JobBoard »). Découverte automatique optionnelle avec `TAVILY_API_KEY` (gratuit, 1 000 requêtes/mois) ou `SERPAPI_KEY` ; les candidats (« je suis disponible… ») sont écartés |
 | Free-Work | API JSON du site | Freelance + CDI IT France | Descriptions complètes, TJM / salaire |
 | Welcome to the Jungle | Index Algolia public du site + API détail | France + full remote | Clés Algolia surchargables dans `.env` si elles changent |

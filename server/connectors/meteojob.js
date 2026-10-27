@@ -2,7 +2,7 @@
 import { getText, sleep } from '../http.js';
 import { contractFromLabel, remoteFromLabel } from '../scrape.js';
 
-const QUERIES = ['développeur react', 'développeur node.js', 'développeur javascript', 'développeur php', 'développeur symfony', 'développeur .net', 'développeur c#'];
+const QUERIES = ['développeur react', 'développeur node.js', 'développeur javascript', 'développeur php', 'développeur symfony'];
 
 export function parseMeteojob(html) {
   const m = html.match(/<script id="candidate-front-state" type="application\/json">([\s\S]*?)<\/script>/);

@@ -9,7 +9,6 @@ const WTTJ_QUERIES = {
   react: ['react', 'reactjs'],
   php: ['php', 'symfony', 'laravel'],
   nodejs: ['nodejs', 'node.js', 'nestjs'],
-  dotnet: ['dotnet', 'asp.net', '.net développeur', 'c# .net'],
 };
 
 /** Vrai si Algolia signale que tous les mots de la requête ont été trouvés dans un attribut de l'offre. */

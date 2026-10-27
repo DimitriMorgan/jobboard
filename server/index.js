@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { openDb, STATUSES } from './db.js';
 import { createRefresher } from './refresh.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
-import { TECHS, CONTRACTS, repairJob } from './normalize.js';
+import { TECHS, CONTRACTS, repairJob, isExcludedJob, htmlToText } from './normalize.js';
 import { manualLinks, MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 import { loadEnv } from './env.js';
 
@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = path.resolve(process.env.DB_PATH || path.join(__dirname, '..', 'data', 'jobboard.sqlite'));
 
 const db = openDb(DB_PATH);
+db.dropTech('dotnet', (title, html) => isExcludedJob(title, htmlToText(html)));
 const repairedAtStart = db.repairIncomplete(repairJob);
 if (repairedAtStart) console.log(`${repairedAtStart} offres complétées depuis leur description.`);
 const refresher = createRefresher(db, { log: console });

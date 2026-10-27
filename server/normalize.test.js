@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectTechs, inferContracts, inferRemote, inferCountry, normalizeJob, sanitize } from './normalize.js';
+import { detectTechs, inferContracts, inferRemote, inferCountry, normalizeJob, sanitize, isExcludedJob } from './normalize.js';
+import { openDb } from './db.js';
 
 test('détection des technos', () => {
   assert.deepEqual(detectTechs('Développeur React / Node.js'), ['javascript', 'react', 'nodejs']);
-  assert.deepEqual(detectTechs('Ingénieur .NET Core C#'), ['dotnet']);
+  assert.deepEqual(detectTechs('Ingénieur .NET Core C#'), []);
   assert.deepEqual(detectTechs('Développeur PHP Symfony'), ['php']);
   assert.deepEqual(detectTechs('Développeur Java Spring'), []);
   assert.deepEqual(detectTechs('Fullstack TypeScript'), ['javascript']);
@@ -78,4 +79,43 @@ test('contrat résolu par ordre de fiabilité, TJM ⇒ freelance', async () => {
   assert.deepEqual(resolveContracts({ title: 'Développeur', description: 'Rien', weak: ['cdi'] }), ['cdi']);
   const job = normalizeJob('hellowork', { sourceId: '1', title: 'Développeur Back-End Node.Js - Refad950 H/F', company: 'Teolia', url: 'https://x/1', contractHints: ['cdi'], compensation: { tjmMin: 420, tjmMax: 420 }, descriptionText: 'Node.js' });
   assert.deepEqual(job.contracts, ['freelance', 'cdi']);
+});
+
+test('.NET / C# écarté de l\u2019agrégateur', () => {
+  const base = { sourceId: '1', url: 'https://x/1', company: 'X' };
+  // Intitulé .NET / C# sans autre techno : écarté, même si la description cite JavaScript
+  assert.equal(normalizeJob('x', { ...base, title: 'Développeur C# .NET Core H/F', descriptionText: 'ASP.NET, Blazor, un peu de JavaScript.' }), null);
+  // Intitulé neutre mais poste .NET avec JavaScript / TypeScript en appoint : écarté
+  assert.equal(normalizeJob('x', { ...base, title: 'Développeur Full Stack H/F', descriptionText: 'Back-end C# / ASP.NET Core, front Angular TypeScript.' }), null);
+  // Intitulé mixte « .NET / React » : écarté aussi (le poste exige C#)
+  assert.equal(normalizeJob('x', { ...base, title: 'Développeur .NET / React', descriptionText: 'C# et React.' }), null);
+  // Intitulé React, description qui mentionne .NET : conservé, sans techno .NET
+  assert.deepEqual(normalizeJob('x', { ...base, title: 'Développeur React', descriptionText: 'React, API en .NET.' }).techs, ['react']);
+  assert.ok(normalizeJob('x', { ...base, title: 'Développeur Full Stack', descriptionText: 'PHP Symfony, ou .NET selon les projets.' }));
+  // Ajout manuel : conservé
+  assert.ok(normalizeJob('x', { ...base, title: 'Dev C# freelance', descriptionText: 'Mission C#', forceKeep: true }));
+  assert.equal(isExcludedJob('Développeur Node.js', 'Node.js'), false);
+  assert.equal(isExcludedJob('Dev.Net / React Ou Angular - Freelance'), true);
+});
+
+test('nettoyage des offres .NET déjà enregistrées', () => {
+  const db = openDb(':memory:');
+  const job = (id, title, techs, extra = {}) => ({ id: `x:${id}`, source: 'x', sourceId: id, title, url: `https://x/${id}`, contracts: ['cdi'], techs, tags: [], fingerprint: id, firstSeenAt: '2026-10-01T00:00:00.000Z', lastSeenAt: '2026-10-01T00:00:00.000Z', description: '', ...extra });
+  db.importJobs([
+    job('1', 'Développeur C# .NET', ['dotnet']),
+    job('2', 'Développeur .NET / React', ['dotnet', 'react']),
+    job('3', 'Développeur Full Stack', ['dotnet', 'javascript'], { description: '<p>C# ASP.NET Core et Angular TypeScript</p>' }),
+    job('4', 'Développeur C#', ['dotnet'], { status: 'candidature_envoyee' }),
+    job('5', 'Post LinkedIn C#', [], { tags: ['Ajout manuel'] }),
+    job('6', 'Développeur PHP', ['php']),
+  ]);
+  const out = db.dropTech('dotnet', (t, html) => isExcludedJob(t, html.replace(/<[^>]+>/g, ' ')));
+  assert.deepEqual(out, { removed: 3, updated: 1 });
+  assert.equal(db.getJob('x:1'), null);
+  assert.equal(db.getJob('x:2'), null);
+  assert.equal(db.getJob('x:3'), null);
+  assert.deepEqual(db.getJob('x:4').techs, []); // offre suivie : gardée
+  assert.ok(db.getJob('x:5'));
+  assert.ok(db.getJob('x:6'));
+  db.close();
 });

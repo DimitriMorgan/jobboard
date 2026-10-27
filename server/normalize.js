@@ -8,9 +8,24 @@ export const TECHS = [
   { id: 'react', label: 'React', re: /\breact(?:js|\.js|-native)?\b|\bnext\.?js\b/i },
   { id: 'php', label: 'PHP', re: /\bphp\b|\bsymfony\b|\blaravel\b/i },
   { id: 'nodejs', label: 'Node.js', re: /\bnode(?:js|\.js)?\b|\bnest(?:js|\.js)\b|\bexpress(?:js|\.js)\b/i },
-  { id: 'dotnet', label: '.NET', re: /(?:^|[^a-z0-9])\.net\b|\bdotnet\b|\basp\.net\b|\bc#|\bcsharp\b|\bblazor\b|\bvb\.net\b/i },
 ];
 export const TECH_IDS = TECHS.map((t) => t.id);
+
+// Écosystème .NET / C# : volontairement exclu de l'agrégateur.
+export const EXCLUDED_TECH_RE = /(?:^|[^a-z0-9])\.net\b|\bdotnet\b|\basp\.net\b|\bc#|\bcsharp\b|\bblazor\b|\bvb\.net\b|\bwpf\b|\bxamarin\b/i;
+
+/**
+ * Offre .NET / C# à écarter : l'intitulé cite .NET ou C# (y compris « .NET / React », le poste exige C#),
+ * ou l'intitulé ne cite aucune de nos technos et la description repose sur .NET / C# avec au mieux
+ * JavaScript en appoint.
+ */
+export function isExcludedJob(title, descriptionText = '') {
+  // Dans un intitulé, « .net » collé à un mot (« Dev.Net », « Fullstack.Net ») désigne aussi .NET.
+  if (EXCLUDED_TECH_RE.test(title || '') || /\.net\b/i.test(title || '')) return true;
+  if (detectTechs(title || '').length) return false;
+  if (!EXCLUDED_TECH_RE.test(descriptionText || '')) return false;
+  return detectTechs(descriptionText).every((t) => t === 'javascript');
+}
 
 /** Mots-clés de recherche envoyés aux plateformes, par techno. */
 export const TECH_QUERIES = {
@@ -18,7 +33,6 @@ export const TECH_QUERIES = {
   react: ['react'],
   php: ['php', 'symfony'],
   nodejs: ['node.js'],
-  dotnet: ['.net', 'c#'],
 };
 
 export const CONTRACTS = ['freelance', 'cdi', 'cdd', 'interim', 'alternance', 'stage', 'autre'];
@@ -207,6 +221,8 @@ export function normalizeJob(source, raw) {
   if (techs.size === 0 && !descriptionText) for (const t of raw.techHints || []) if (TECH_IDS.includes(t)) techs.add(t);
   // Offre ajoutée à la main (post LinkedIn…) : conservée même si aucune de nos technos n'y est citée.
   if (techs.size === 0 && !raw.forceKeep) return null;
+  // .NET / C# : hors périmètre (un ajout manuel reste conservé, c'est un choix explicite).
+  if (!raw.forceKeep && isExcludedJob(title, descriptionText)) return null;
 
   const contracts = inferContracts({ hints: raw.contractHints || [], title, description: descriptionText });
   const remote = inferRemote({ hint: raw.remoteHint, text: `${title}\n${raw.location || ''}\n${descriptionText.slice(0, 2000)}` });

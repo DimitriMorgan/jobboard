@@ -112,9 +112,8 @@ async function discover(ctx) {
   const topics = [
     '(react OR "node.js" OR nodejs OR javascript OR typescript)',
     '(php OR symfony OR laravel)',
-    '(".net" OR "c#" OR dotnet)',
-    '(react OR node OR php OR ".net") freelance TJM',
-    '(react OR node OR php OR ".net") CDI "nous recrutons"',
+    '(react OR node OR php) freelance TJM',
+    '(react OR node OR php) CDI "nous recrutons"',
   ];
   const lead = ['"mission freelance"', '"je recrute"', '"recherche un développeur"', '"nous recherchons"'];
   const queries = [];

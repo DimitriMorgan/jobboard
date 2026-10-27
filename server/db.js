@@ -331,6 +331,41 @@ export function openDb(dbPath) {
       );
     },
     /** Supprime les offres non revues depuis `days` jours (sauf celles en cours de suivi). */
+    /**
+     * Retire une techno abandonnée des offres enregistrées et supprime celles qui deviennent hors sujet
+     * (`isExcluded(title, descriptionHtml)` vrai, ou plus aucune techno). Les ajouts manuels et les offres suivies
+     * (statut autre que nouveau / vu / ignoré) sont conservés. Renvoie { removed, updated }.
+     */
+    dropTech(techId, isExcluded) {
+      const rows = db.prepare('SELECT id, title, description, techs, tags, status FROM jobs').all();
+      const del = db.prepare('DELETE FROM jobs WHERE id = ?');
+      const upd = db.prepare('UPDATE jobs SET techs = ? WHERE id = ?');
+      let removed = 0;
+      let updated = 0;
+      db.exec('BEGIN');
+      try {
+        for (const r of rows) {
+          const techs = JSON.parse(r.techs || '[]');
+          const kept = techs.filter((t) => t !== techId);
+          const manual = JSON.parse(r.tags || '[]').includes('Ajout manuel');
+          const tracked = !['nouveau', 'vu', 'ignore'].includes(r.status);
+          const offTopic = (techs.length > 0 && kept.length === 0) || isExcluded(r.title, r.description || '');
+          if (offTopic && !manual && !tracked) {
+            del.run(r.id);
+            removed++;
+          } else if (kept.length !== techs.length) {
+            upd.run(JSON.stringify(kept), r.id);
+            updated++;
+          }
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+      return { removed, updated };
+    },
+
     purgeOlderThan(days) {
       const limit = new Date(Date.now() - days * 86400e3).toISOString();
       return db.prepare(`DELETE FROM jobs WHERE last_seen_at < ? AND status IN ('nouveau', 'vu', 'ignore')`).run(limit).changes;
