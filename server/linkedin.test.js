@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseList, parseDetail, linkedinContracts, searchWindowSeconds } from './connectors/linkedin.js';
+import linkedin, { parseList, parseDetail, linkedinContracts, searchWindowSeconds } from './connectors/linkedin.js';
 import { normalizeJob } from './normalize.js';
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
@@ -42,4 +42,29 @@ test('LinkedIn : fenêtre de recherche adaptée au dernier passage', () => {
   // Rattrapage : peu d'offres LinkedIn découvertes cette semaine → 7 jours
   assert.equal(searchWindowSeconds('2026-09-30T09:00:00Z', now, 120), 7 * 86400);
   assert.equal(searchWindowSeconds('2026-09-30T09:00:00Z', now, 5000), 86400);
+});
+
+test('LinkedIn : budget de temps respecté quand LinkedIn refuse une requête sur deux', async () => {
+  const list = fixture('linkedin-list.html');
+  const detail = fixture('linkedin-detail.html');
+  const realFetch = globalThis.fetch;
+  const env = { ...process.env };
+  let n = 0;
+  globalThis.fetch = async (url) => {
+    n++;
+    if (n % 2 === 0) return new Response('slow down', { status: 429 });
+    return new Response(String(url).includes('jobPosting') ? detail : list, { status: 200 });
+  };
+  Object.assign(process.env, { LINKEDIN_MAX_MINUTES: '0.05', LINKEDIN_DELAY_MS: '10' }); // 3 s
+  try {
+    const t0 = Date.now();
+    const jobs = await linkedin.fetch({ knownJobs: () => [], progress: () => {} });
+    const elapsed = Date.now() - t0;
+    assert.ok(elapsed < 6000, `collecte trop longue : ${elapsed} ms`);
+    assert.ok(jobs.length >= 2); // les offres trouvées avant l'arrêt sont rendues
+    assert.match(jobs.warning || '', /temps imparti/);
+  } finally {
+    globalThis.fetch = realFetch;
+    process.env = env;
+  }
 });

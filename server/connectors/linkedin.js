@@ -120,14 +120,29 @@ export default {
     const weekAgo = Date.now() - 7 * 86400e3;
     const recentKnown = (ctx.knownJobs?.() || []).filter((k) => Date.parse(k.firstSeenAt) > weekAgo).length;
     const windowSec = searchWindowSeconds(ctx.lastSuccessAt, Date.now(), ctx.knownJobs ? recentKnown : Infinity);
+    // Budget de temps : LinkedIn peut ralentir fortement (429 espacés) ; sans plafond, l'actualisation entière
+    // dépassait le délai du workflow et rien n'était publié. La recherche dispose de la moitié du temps au plus.
+    const t0 = Date.now();
+    const deadline = t0 + num(process.env.LINKEDIN_MAX_MINUTES, 40) * 60e3;
+    const searchDeadline = t0 + (deadline - t0) / 2;
     let requests = 0;
     let delay = baseDelay;
     let consecutive429 = 0;
+    let total429 = 0;
     let stopped = false;
+    let timedOut = false;
 
-    /** GET avec rythme, budget et gestion des 429 (pause puis ralentissement, arrêt après 3 refus consécutifs). */
-    const liGet = async (url) => {
+    /**
+     * GET avec rythme, budgets (requêtes, temps) et gestion des 429 : pause puis ralentissement, retour progressif
+     * au rythme normal ensuite, arrêt après 3 refus consécutifs. Renvoie null quand il faut s'arrêter.
+     */
+    const liGet = async (url, until = deadline) => {
       while (!stopped) {
+        if (Date.now() >= until) {
+          timedOut = true;
+          if (until === deadline) stopped = true;
+          return null;
+        }
         if (requests >= maxRequests) {
           stopped = true;
           break;
@@ -136,18 +151,21 @@ export default {
         try {
           const html = await getText(url, { retries: 0, timeoutMs: 20000 });
           consecutive429 = 0;
+          delay = Math.max(baseDelay, Math.round(delay * 0.9));
           await sleep(delay + Math.random() * 400);
           return html;
         } catch (err) {
           if (err instanceof HttpError && err.status === 429) {
             consecutive429++;
+            total429++;
             if (consecutive429 >= 3) {
               stopped = true;
               break;
             }
             delay = Math.min(delay * 2, 8000);
-            ctx.progress?.(`LinkedIn limite le débit (429) : pause de ${30 * consecutive429} s, rythme ralenti à ${delay} ms`);
-            await sleep(30000 * consecutive429);
+            const pause = Math.max(0, Math.min(30000 * consecutive429, until - Date.now()));
+            ctx.progress?.(`LinkedIn limite le débit (429) : pause de ${Math.round(pause / 1000)} s, rythme ralenti à ${delay} ms`);
+            await sleep(pause);
             continue;
           }
           if (err instanceof HttpError && (err.status === 400 || err.status === 404)) return '';
@@ -161,14 +179,14 @@ export default {
     const jobs = new Map();
     const searchBudget = Math.max(50, maxRequests - Math.min(detailLimit, Math.floor(maxRequests * 0.45)));
     for (const q of LINKEDIN_QUERIES) {
-      if (stopped || requests >= searchBudget) break;
+      if (stopped || requests >= searchBudget || Date.now() >= searchDeadline) break;
       let start = 0;
       let dry = 0;
       let pages = 0;
       let found = 0;
       for (let p = 0; p < q.maxPages && requests < searchBudget; p++) {
         const params = new URLSearchParams({ keywords: q.keywords, ...GEO, f_TPR: `r${windowSec}`, start: String(start) });
-        const html = await liGet(`${SEARCH}?${params}`);
+        const html = await liGet(`${SEARCH}?${params}`, searchDeadline);
         if (html == null) break;
         const items = parseList(html, q.tech);
         pages++;
@@ -225,10 +243,11 @@ export default {
       details++;
       if (job.refreshOnly && !jobs.has(job.sourceId)) jobs.set(job.sourceId, job);
     }
-    ctx.progress?.(`LinkedIn : ${jobs.size} offres, ${details} fiches lues (dont ${Math.max(0, details - fresh.length)} complétées a posteriori), ${requests} requêtes, fenêtre ${Math.round(windowSec / 3600)} h`);
+    ctx.progress?.(`LinkedIn : ${jobs.size} offres, ${details} fiches lues (dont ${Math.max(0, details - fresh.length)} complétées a posteriori), ${requests} requêtes, ${total429} refus (429), ${Math.round((Date.now() - t0) / 60000)} min, fenêtre ${Math.round(windowSec / 3600)} h`);
 
     const result = [...jobs.values()];
-    if (stopped && requests < maxRequests) result.warning = `LinkedIn a limité les requêtes (429) : résultats partiels (${result.length} offres, ${details} fiches lues). La suite sera récupérée à la prochaine actualisation.`;
+    if (timedOut && stopped) result.warning = `LinkedIn ralentit les requêtes (${total429} refus) : collecte arrêtée au bout du temps imparti avec ${result.length} offres et ${details} fiches lues. La suite sera récupérée à la prochaine actualisation.`;
+    else if (stopped && requests < maxRequests) result.warning = `LinkedIn a limité les requêtes (429) : résultats partiels (${result.length} offres, ${details} fiches lues). La suite sera récupérée à la prochaine actualisation.`;
     else if (stopped) result.warning = `Budget de ${maxRequests} requêtes LinkedIn atteint : ${result.length} offres, ${details} fiches lues (voir LINKEDIN_MAX_REQUESTS).`;
     return result;
   },
