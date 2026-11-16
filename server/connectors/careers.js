@@ -21,8 +21,12 @@ const num = (v, d) => (v !== undefined && v !== '' && Number.isFinite(Number(v))
 const DAY = 86400e3;
 /** Délai avant de retenter de deviner les identifiants d'une entreprise restée introuvable. */
 const NAME_RECHECK_DAYS = 90;
-/** Plateformes essayées pour deviner un identifiant (Lever US et EU partagent les identifiants : les deux sont testés). */
-const GUESS_ATS = ['lever', 'lever-eu', 'greenhouse', 'ashby', 'recruitee', 'teamtailor', 'workable', 'smartrecruiters'];
+/**
+ * Plateformes essayées pour deviner un identifiant (Lever US et EU sont deux instances distinctes : les deux sont
+ * testées). Recruitee et Workable n'acceptent qu'une requête toutes les quelques secondes : les essayer pour chaque nom
+ * ralentirait toute la découverte. Leurs entreprises arrivent par les liens trouvés dans les offres et par Common Crawl.
+ */
+const GUESS_ATS = ['lever', 'lever-eu', 'greenhouse', 'ashby', 'teamtailor', 'smartrecruiters'];
 
 export function stateFile() {
   return path.resolve(process.env.CAREERS_STATE_FILE || 'data/careers-state.json');
@@ -213,21 +217,28 @@ export default {
       const found = [];
       let unsure = false; // erreur réseau ou refus : on retentera ce nom à la prochaine actualisation
       for (const slug of guessSlugs(name)) {
-        for (const ats of GUESS_ATS) {
-          if (!timeLeft() || limiter.blocked(HOST_OF[ats])) return;
-          const k = keyOf(ats, slug);
-          if (state.companies[k]) {
-            if (state.companies[k].status !== 'dead') found.push(k);
-            continue;
-          }
-          const company = { ats, slug, name, status: 'candidate', origin: 'guess', addedAt: new Date().toISOString() };
-          await readCompany(company);
-          // Une entreprise devinée n'est gardée dans l'annuaire que si elle existe vraiment sur la plateforme.
-          if (company.status !== 'dead' && !company.error) {
-            state.companies[k] = company;
-            found.push(k);
-          } else if (company.status !== 'dead') unsure = true;
-        }
+        if (!timeLeft()) return;
+        // Toutes les plateformes en parallèle pour cet identifiant.
+        await Promise.all(
+          GUESS_ATS.map(async (ats) => {
+            if (limiter.blocked(HOST_OF[ats])) {
+              unsure = true;
+              return;
+            }
+            const k = keyOf(ats, slug);
+            if (state.companies[k]) {
+              if (state.companies[k].status !== 'dead') found.push(k);
+              return;
+            }
+            const company = { ats, slug, name, status: 'candidate', origin: 'guess', addedAt: new Date().toISOString() };
+            await readCompany(company);
+            // Une entreprise devinée n'est gardée dans l'annuaire que si elle existe vraiment sur la plateforme.
+            if (company.status !== 'dead' && !company.error) {
+              state.companies[k] = company;
+              found.push(k);
+            } else if (company.status !== 'dead') unsure = true;
+          }),
+        );
         if (found.length) break; // premier identifiant trouvé : inutile d'essayer les variantes suivantes
       }
       if (unsure && !found.length) return;
