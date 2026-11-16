@@ -283,7 +283,8 @@ export function parseCareersUrl(input) {
   if (h.endsWith('.recruitee.com') && sub !== 'www') return { ats: 'recruitee', slug: sub };
   if (h.endsWith('.teamtailor.com') && !/^(www|app|career|assets|status|support|docs)$/.test(sub)) return { ats: 'teamtailor', slug: sub };
   if (h === 'apply.workable.com' && seg[0] && seg[0] !== 'api') return { ats: 'workable', slug: seg[0].toLowerCase() };
-  if (/^(jobs|careers)\.smartrecruiters\.com$/.test(h) && seg[0]) return { ats: 'smartrecruiters', slug: seg[0] };
+  // SmartRecruiters ignore la casse (« ALTEN » = « alten ») : identifiant en minuscules pour éviter les doublons.
+  if (/^(jobs|careers)\.smartrecruiters\.com$/.test(h) && seg[0]) return { ats: 'smartrecruiters', slug: seg[0].toLowerCase() };
   if (/\.jobs\.personio\.(de|com)$/.test(h)) return { ats: 'personio', slug: sub };
   return null;
 }

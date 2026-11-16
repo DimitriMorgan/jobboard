@@ -34,7 +34,7 @@ test('sites carrières : identifiants devinés et adresses reconnues', () => {
   assert.deepEqual(parseCareersUrl('https://job-boards.greenhouse.io/gitlab/jobs/42'), { ats: 'greenhouse', slug: 'gitlab' });
   assert.deepEqual(parseCareersUrl('https://boards.greenhouse.io/embed/job_board?for=alan'), { ats: 'greenhouse', slug: 'alan' });
   assert.deepEqual(parseCareersUrl('https://hubvisory.recruitee.com/o/dev'), { ats: 'recruitee', slug: 'hubvisory' });
-  assert.deepEqual(parseCareersUrl('https://careers.smartrecruiters.com/Alten'), { ats: 'smartrecruiters', slug: 'Alten' });
+  assert.deepEqual(parseCareersUrl('https://careers.smartrecruiters.com/Alten'), { ats: 'smartrecruiters', slug: 'alten' });
   assert.equal(parseCareersUrl('https://www.example.com/careers'), null);
   const links = findCareersLinks('Postulez sur https://jobs.ashbyhq.com/mui/123 ou https://apply.workable.com/seeq/j/ABC, et https://jobs.ashbyhq.com/mui');
   assert.deepEqual(links, [{ ats: 'ashby', slug: 'mui' }, { ats: 'workable', slug: 'seeq' }]);

@@ -192,3 +192,16 @@ code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; }
 .companies-add { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
 .companies-add textarea { flex: 1; }
 @media (max-width: 700px) { .companies-add { flex-direction: column; } .companies-add textarea { width: 100%; } }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+@media (max-width: 700px) { .companies-bar input[type='search'] { min-width: 0; width: 100%; } }
+@media (max-width: 700px) {
+  .topbar { gap: 10px; padding: 10px 16px; }
+  .tabs { margin-left: 0; max-width: 100%; overflow-x: auto; }
+  .tabs button { padding: 8px 10px; white-space: nowrap; }
+  .refresh-zone { margin-left: 0; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+  .sources-page { padding: 16px; }
+  .sources-page > section { min-width: 0; }
+  .sources-table { display: block; overflow-x: auto; }
+}
+@media (max-width: 700px) { .companies-count { flex-basis: 100%; } .companies-bar input[type='search'] { flex-basis: 100%; } }
+.companies-bar label { display: inline-flex; align-items: center; gap: 6px; }

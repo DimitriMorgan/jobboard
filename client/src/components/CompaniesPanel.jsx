@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, formatDateTime } from '../api.js';
 
-const ATS_LABELS = { lever: 'Lever', 'lever-eu': 'Lever', greenhouse: 'Greenhouse', ashby: 'Ashby', recruitee: 'Recruitee', workable: 'Workable', smartrecruiters: 'SmartRecruiters', personio: 'Personio' };
+const ATS_LABELS = { lever: 'Lever', 'lever-eu': 'Lever', greenhouse: 'Greenhouse', ashby: 'Ashby', recruitee: 'Recruitee', teamtailor: 'Teamtailor', workable: 'Workable', smartrecruiters: 'SmartRecruiters', personio: 'Personio' };
 const PAGE = 200;
 
 /** Onglet Entreprises : annuaire des entreprises suivies sur leur site carrière, et ajout d'une page carrière. */
@@ -39,7 +39,7 @@ export default function CompaniesPanel({ refreshState, onAdd, onShowJobs }) {
       <section>
         <h2>Entreprises suivies sur leur site carrière</h2>
         <p className="muted">
-          Chaque jour, le board relit les offres publiées par ces entreprises sur leur page carrière (Lever, Greenhouse, Ashby, Recruitee, Workable, SmartRecruiters, Personio)
+          Chaque jour, le board relit les offres publiées par ces entreprises sur leur page carrière (Lever, Greenhouse, Ashby, Recruitee, Teamtailor, Workable, SmartRecruiters, Personio)
           et ajoute leurs postes de développeur en France ou en télétravail. L'annuaire grandit tout seul : entreprises qui recrutent déjà des devs dans le board, liens trouvés
           dans les offres, et vos ajouts.
         </p>
@@ -50,12 +50,15 @@ export default function CompaniesPanel({ refreshState, onAdd, onShowJobs }) {
         ) : (
           <>
             <div className="companies-bar">
-              <strong>{companies.length}</strong> entreprises suivies, dont <strong>{hiring}</strong> avec des offres de développeur en ce moment.
+              <span className="companies-count">
+                <strong>{companies.length}</strong> entreprises suivies, dont <strong>{hiring}</strong> avec des offres de développeur en ce moment.
+              </span>
               <input type="search" placeholder="Rechercher une entreprise…" value={q} onChange={(e) => { setQ(e.target.value); setVisible(PAGE); }} />
               <label className="small">
                 <input type="checkbox" checked={onlyHiring} onChange={(e) => { setOnlyHiring(e.target.checked); setVisible(PAGE); }} /> Seulement celles qui recrutent des devs
               </label>
             </div>
+            <div className="table-scroll">
             <table className="sources-table">
               <thead>
                 <tr>
@@ -89,6 +92,7 @@ export default function CompaniesPanel({ refreshState, onAdd, onShowJobs }) {
                 ))}
               </tbody>
             </table>
+            </div>
             {list.length > visible ? (
               <button className="secondary-btn load-more" onClick={() => setVisible((v) => v + PAGE)}>
                 Afficher {Math.min(PAGE, list.length - visible)} entreprises de plus ({list.length - visible} restantes)
@@ -100,7 +104,7 @@ export default function CompaniesPanel({ refreshState, onAdd, onShowJobs }) {
       <section>
         <h2>Suivre une entreprise</h2>
         <p className="muted">
-          Collez l'adresse de sa page carrière : une page Lever, Greenhouse, Ashby, Recruitee, Workable, SmartRecruiters ou Personio, ou la page « carrières » de son propre site
+          Collez l'adresse de sa page carrière : une page Lever, Greenhouse, Ashby, Recruitee, Teamtailor, Workable, SmartRecruiters ou Personio, ou la page « carrières » de son propre site
           si elle renvoie vers l'une de ces plateformes. Plusieurs adresses possibles, une par ligne. L'entreprise reste suivie même sans offre en France.
         </p>
         <form className="companies-add" onSubmit={submit}>

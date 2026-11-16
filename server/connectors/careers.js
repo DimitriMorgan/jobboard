@@ -28,11 +28,17 @@ export function stateFile() {
   return path.resolve(process.env.CAREERS_STATE_FILE || 'data/careers-state.json');
 }
 
-/** File d'attente par serveur : quelques requêtes simultanées au plus, et arrêt du serveur après trop de refus (429). */
-function hostLimiter({ perHost = 3, maxRefusals = 6 } = {}) {
+/**
+ * Rythme par serveur : requêtes simultanées et pause minimale entre deux requêtes. Recruitee et Workable refusent
+ * (429) dès quelques requêtes rapprochées : une à la fois, espacées.
+ */
+const HOST_PACE = { 'recruitee.com': { perHost: 1, gapMs: 1500 }, 'apply.workable.com': { perHost: 1, gapMs: 3000 } };
+
+/** File d'attente par serveur, et arrêt du serveur pour l'actualisation après trop de refus (429). */
+function hostLimiter({ perHost = 3, maxRefusals = 8 } = {}) {
   const hosts = new Map();
   const get = (h) => {
-    if (!hosts.has(h)) hosts.set(h, { active: 0, queue: [], refusals: 0, blocked: false });
+    if (!hosts.has(h)) hosts.set(h, { active: 0, queue: [], refusals: 0, blocked: false, last: 0, ...{ perHost, gapMs: 0, ...HOST_PACE[h] } });
     return hosts.get(h);
   };
   return {
@@ -41,13 +47,16 @@ function hostLimiter({ perHost = 3, maxRefusals = 6 } = {}) {
     async run(h, fn) {
       const s = get(h);
       if (s.blocked) throw new HttpError(429, h, 'serveur abandonné pour cette actualisation');
-      if (s.active >= perHost) await new Promise((r) => s.queue.push(r));
+      if (s.active >= s.perHost) await new Promise((r) => s.queue.push(r));
       s.active++;
+      const wait = s.last + s.gapMs - Date.now();
+      if (wait > 0) await sleep(wait);
+      s.last = Date.now();
       try {
         return await fn();
       } catch (err) {
         if (err instanceof HttpError && err.status === 429 && ++s.refusals >= maxRefusals) s.blocked = true;
-        if (err instanceof HttpError && err.status === 429) await sleep(3000);
+        if (err instanceof HttpError && err.status === 429) await sleep(10000);
         throw err;
       } finally {
         s.active--;
@@ -107,7 +116,9 @@ export default {
     const concurrency = num(process.env.CAREERS_CONCURRENCY, 16);
     const limiter = hostLimiter();
     const out = [];
-    const counters = { read: 0, checked: 0, joined: 0, guessed: 0, errors: 0, manual: 0 };
+    const counters = { read: 0, checked: 0, joined: 0, guessed: 0, errors: 0, manual: 0, details: 0 };
+    // Fiches lues une à une (SmartRecruiters) : plafond par actualisation, le reste est complété les jours suivants.
+    const detailLimit = num(process.env.CAREERS_DETAIL_LIMIT, 300);
     const timeLeft = () => Date.now() < deadline;
 
     /** Lit une entreprise, met à jour l'annuaire et garde ses offres pertinentes si elle est suivie. */
@@ -123,6 +134,9 @@ export default {
         if (company.status !== 'pool') return;
         for (const { job, place } of kept) {
           if (reader.detail && !job.descriptionHtml && ctx.needsDetail?.(`${company.ats}:${company.slug}:${job.id}`) !== false) {
+            // Fiche non lue (plafond atteint) : l'offre attend le prochain passage plutôt que d'entrer sans description.
+            if (counters.details >= detailLimit || !timeLeft()) continue;
+            counters.details++;
             await limiter.run(HOST_OF[company.ats], () => reader.detail(job)).catch(() => {});
           }
           out.push(toRaw(company, job, place));
@@ -241,7 +255,7 @@ export default {
 
     saveState(file, state);
     const all = Object.values(state.companies);
-    const msg = `Sites carrières : ${poolCompanies(state).length} entreprises suivies (${counters.joined} nouvelles), ${all.length} connues, ${counters.read} relues, ${counters.checked} vérifiées, ${counters.guessed}/${names.length} noms essayés, ${linkedAdded} liens découverts, ${harvested} adresses Common Crawl, ${out.length} offres, ${Math.round((Date.now() - t0) / 60000)} min`;
+    const msg = `Sites carrières : ${poolCompanies(state).length} entreprises suivies (${counters.joined} nouvelles), ${all.length} connues, ${counters.read} relues, ${counters.checked} vérifiées, ${counters.guessed}/${names.length} noms essayés, ${linkedAdded} liens découverts, ${harvested} adresses Common Crawl, ${counters.details} fiches lues, ${out.length} offres, ${Math.round((Date.now() - t0) / 60000)} min`;
     ctx.progress?.(msg);
     const refused = limiter.stats();
     if (refused.length) ctx.progress?.(`Sites carrières, refus : ${refused.join(' ; ')}`);
