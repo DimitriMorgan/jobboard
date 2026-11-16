@@ -1,5 +1,6 @@
 // Regroupe les offres identiques publiées sur plusieurs sites (même entreprise + même intitulé).
-const rank = (j) => (j.status && !['nouveau', 'vu', 'ignore'].includes(j.status) ? 4 : 0) + (j.favorite ? 2 : 0) + (j.description || j.excerpt ? 1 : 0);
+// À égalité, l'offre publiée sur le site de l'entreprise elle-même est montrée en premier (source d'origine).
+const rank = (j) => (j.status && !['nouveau', 'vu', 'ignore'].includes(j.status) ? 4 : 0) + (j.favorite ? 2 : 0) + (j.description || j.excerpt ? 1 : 0) + (j.source === 'careers' ? 0.5 : 0);
 
 export function groupDuplicates(jobs) {
   const groups = new Map();
