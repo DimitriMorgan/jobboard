@@ -80,7 +80,7 @@ test('sites carrières : découverte, lecture et sélection des offres (Lever si
     if (String(url).startsWith('https://api.lever.co/v0/postings/acme')) return new Response(JSON.stringify(lever), { status: 200 });
     return new Response('{"ok":false,"error":"Document not found"}', { status: 404 });
   };
-  Object.assign(process.env, { CAREERS_STATE_FILE: file, CAREERS_MAX_MINUTES: '1' });
+  Object.assign(process.env, { CAREERS_STATE_FILE: file, CAREERS_MAX_MINUTES: "1", CAREERS_HARVEST: "0" });
   try {
     const ctx = { progress: () => {}, corpus: () => [{ company: 'Acme', url: 'https://x/1', description: 'Rejoignez-nous' }] };
     const raw = await careers.fetch(ctx);

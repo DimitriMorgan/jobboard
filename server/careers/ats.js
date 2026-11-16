@@ -76,7 +76,8 @@ const greenhouse = {
       publishedAt: iso(j.first_published || j.updated_at),
       employment: (j.metadata || []).map((m) => (typeof m.value === 'string' ? m.value : '')).join(' '),
     }));
-    return { name: data.jobs?.[0]?.company_name || null, careersUrl: `https://job-boards.greenhouse.io/${slug}`, jobs };
+    const origin = data.jobs?.[0]?.absolute_url ? new URL(data.jobs[0].absolute_url).origin : 'https://job-boards.greenhouse.io';
+    return { name: data.jobs?.[0]?.company_name || null, careersUrl: `${origin}/${slug}`, jobs };
   },
 };
 
@@ -221,7 +222,43 @@ const personio = {
   },
 };
 
-export const ATS = { lever: lever('us'), 'lever-eu': lever('eu'), greenhouse, ashby, recruitee, workable, smartrecruiters, personio };
+const teamtailor = {
+  id: 'teamtailor',
+  label: 'Teamtailor',
+  careersUrl: (slug) => `https://${slug}.teamtailor.com/jobs`,
+  async fetch(slug) {
+    const xml = await getText(`https://${slug}.teamtailor.com/jobs.rss`, OPTS);
+    const $ = cheerio.load(xml, { xmlMode: true });
+    if (!$('rss').length) throw new HttpError(404, slug, 'pas de flux');
+    const jobs = $('item')
+      .toArray()
+      .map((el) => {
+        const it = $(el);
+        // Lieux dans l'espace de noms tt: (tt:locations > tt:location > ville, pays…) : on prend tout leur texte.
+        const places = it
+          .children()
+          .toArray()
+          .filter((c) => /location/i.test(c.tagName || c.name || ''))
+          .map((c) => $(c).text().replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+        const link = it.find('link').first().text().trim();
+        const raw = $.xml(el);
+        return {
+          id: (it.find('guid').first().text() || link).split('/').filter(Boolean).pop(),
+          title: it.find('title').first().text().trim(),
+          location: places.join(' · '),
+          remote: /remote|t[ée]l[ée]travail|fully_remote/i.test(raw.replace(/<description>[\s\S]*?<\/description>/, '')),
+          url: link,
+          descriptionHtml: it.find('description').first().text(),
+          publishedAt: iso(it.find('pubDate').first().text()),
+          employment: it.children().toArray().filter((c) => /employment|type/i.test(c.tagName || '')).map((c) => $(c).text()).join(' '),
+        };
+      });
+    return { name: $('channel > title').first().text().trim() || null, careersUrl: `https://${slug}.teamtailor.com/jobs`, jobs };
+  },
+};
+
+export const ATS = { lever: lever('us'), 'lever-eu': lever('eu'), greenhouse, ashby, recruitee, teamtailor, workable, smartrecruiters, personio };
 
 /** Libellé de la plateforme pour l'affichage. */
 export const atsLabel = (id) => ATS[id]?.label || id;
@@ -244,6 +281,7 @@ export function parseCareersUrl(input) {
   if (/(^|\.)greenhouse\.io$/.test(h) && u.searchParams.get('for')) return { ats: 'greenhouse', slug: u.searchParams.get('for').toLowerCase() };
   if (h === 'jobs.ashbyhq.com' && seg[0]) return { ats: 'ashby', slug: decodeURIComponent(seg[0]).toLowerCase() };
   if (h.endsWith('.recruitee.com') && sub !== 'www') return { ats: 'recruitee', slug: sub };
+  if (h.endsWith('.teamtailor.com') && !/^(www|app|career|assets|status|support|docs)$/.test(sub)) return { ats: 'teamtailor', slug: sub };
   if (h === 'apply.workable.com' && seg[0] && seg[0] !== 'api') return { ats: 'workable', slug: seg[0].toLowerCase() };
   if (/^(jobs|careers)\.smartrecruiters\.com$/.test(h) && seg[0]) return { ats: 'smartrecruiters', slug: seg[0] };
   if (/\.jobs\.personio\.(de|com)$/.test(h)) return { ats: 'personio', slug: sub };
@@ -253,7 +291,7 @@ export function parseCareersUrl(input) {
 /** Repère les liens vers des plateformes de recrutement dans un texte ou une page HTML (page carrière d'un site maison…). */
 export function findCareersLinks(text) {
   const out = new Map();
-  const re = /https?:\/\/(?:jobs\.(?:eu\.)?lever\.co\/[\w.-]+|(?:boards|job-boards)(?:\.eu)?\.greenhouse\.io\/(?:embed\/job_board\?for=)?[\w.-]+|jobs\.ashbyhq\.com\/[\w.%-]+|[\w-]+\.recruitee\.com|apply\.workable\.com\/[\w-]+|(?:jobs|careers)\.smartrecruiters\.com\/[\w-]+|[\w-]+\.jobs\.personio\.(?:de|com))/gi;
+  const re = /https?:\/\/(?:jobs\.(?:eu\.)?lever\.co\/[\w.-]+|(?:boards|job-boards)(?:\.eu)?\.greenhouse\.io\/(?:embed\/job_board\?for=)?[\w.-]+|jobs\.ashbyhq\.com\/[\w.%-]+|[\w-]+\.recruitee\.com|[\w-]+\.teamtailor\.com|apply\.workable\.com\/[\w-]+|(?:jobs|careers)\.smartrecruiters\.com\/[\w-]+|[\w-]+\.jobs\.personio\.(?:de|com))/gi;
   for (const m of String(text || '').matchAll(re)) {
     const p = parseCareersUrl(m[0]);
     if (p && !/^(api|www|embed|static|assets|jobs|careers|v0|v1|search)$/i.test(p.slug)) out.set(`${p.ats}:${p.slug}`, p);

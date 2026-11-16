@@ -17,7 +17,7 @@ export const POOL_EXPIRY_DAYS = 60;
 const DAY = 86400e3;
 
 export function emptyState() {
-  return { format: 1, updatedAt: null, harvest: { index: null, at: null }, companies: {} };
+  return { format: 1, updatedAt: null, harvest: {}, names: {}, companies: {} };
 }
 
 export function loadState(file) {
@@ -60,6 +60,9 @@ export function dueForCheck(state, now = Date.now()) {
     else if (c.status === 'dead' && now - Date.parse(c.checkedAt || 0) > DEAD_RECHECK_DAYS * DAY) recheck.push(c);
   }
   recheck.sort((a, b) => Date.parse(a.checkedAt || 0) - Date.parse(b.checkedAt || 0));
+  // Liens trouvés dans les offres (entreprises qui recrutent en France) avant les découvertes de l'index mondial.
+  const prio = (c) => (c.origin === 'manual' ? 0 : c.origin === 'link' ? 1 : 2);
+  out.sort((a, b) => prio(a) - prio(b));
   return [...out, ...recheck];
 }
 

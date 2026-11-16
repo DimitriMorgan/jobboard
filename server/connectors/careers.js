@@ -1,5 +1,5 @@
 // Sites carrières des entreprises : offres publiées directement par les entreprises via leur plateforme de
-// recrutement (Lever, Greenhouse, Ashby, Recruitee, Workable, SmartRecruiters, Personio).
+// recrutement (Lever, Greenhouse, Ashby, Recruitee, Teamtailor, Workable, SmartRecruiters, Personio).
 //
 // L'annuaire (server/careers/state.js) se remplit tout seul :
 //  - liens vers ces plateformes trouvés dans les offres déjà collectées (identifiant certain) ;
@@ -12,6 +12,7 @@ import { HttpError, getText, sleep } from '../http.js';
 import { ATS, parseCareersUrl, findCareersLinks, prettyName } from '../careers/ats.js';
 import { loadState, saveState, addCandidates, dueForCheck, poolCompanies, recordCheck, keyOf } from '../careers/state.js';
 import { guessSlugs, nameKey } from '../careers/guess.js';
+import { harvestCommonCrawl } from '../careers/harvest.js';
 import { isDevTitle, relevantPlace } from '../careers/filters.js';
 import { resolveContracts, htmlToText } from '../normalize.js';
 import { contractFromLabel } from '../scrape.js';
@@ -21,7 +22,7 @@ const DAY = 86400e3;
 /** Délai avant de retenter de deviner les identifiants d'une entreprise restée introuvable. */
 const NAME_RECHECK_DAYS = 90;
 /** Plateformes essayées pour deviner un identifiant (Lever US et EU partagent les identifiants : les deux sont testés). */
-const GUESS_ATS = ['lever', 'lever-eu', 'greenhouse', 'ashby', 'recruitee', 'workable', 'personio', 'smartrecruiters'];
+const GUESS_ATS = ['lever', 'lever-eu', 'greenhouse', 'ashby', 'recruitee', 'teamtailor', 'workable', 'smartrecruiters'];
 
 export function stateFile() {
   return path.resolve(process.env.CAREERS_STATE_FILE || 'data/careers-state.json');
@@ -56,7 +57,7 @@ function hostLimiter({ perHost = 3, maxRefusals = 6 } = {}) {
   };
 }
 
-const HOST_OF = { lever: 'api.lever.co', 'lever-eu': 'api.eu.lever.co', greenhouse: 'boards-api.greenhouse.io', ashby: 'api.ashbyhq.com', recruitee: 'recruitee.com', workable: 'apply.workable.com', smartrecruiters: 'api.smartrecruiters.com', personio: 'jobs.personio.de' };
+const HOST_OF = { lever: 'api.lever.co', 'lever-eu': 'api.eu.lever.co', greenhouse: 'boards-api.greenhouse.io', ashby: 'api.ashbyhq.com', recruitee: 'recruitee.com', teamtailor: 'teamtailor.com', workable: 'apply.workable.com', smartrecruiters: 'api.smartrecruiters.com', personio: 'jobs.personio.de' };
 
 /** Offres retenues d'un tableau d'offres + statistiques pour l'annuaire. */
 export function selectJobs(company, board) {
@@ -97,7 +98,7 @@ export default {
   id: 'careers',
   name: 'Sites des entreprises',
   site: '',
-  description: 'Offres publiées par les entreprises sur leur propre page carrière (Lever, Greenhouse, Ashby, Recruitee, Workable, SmartRecruiters, Personio).',
+  description: 'Offres publiées par les entreprises sur leur propre page carrière (Lever, Greenhouse, Ashby, Recruitee, Teamtailor, Workable, SmartRecruiters, Personio).',
   async fetch(ctx) {
     const file = stateFile();
     const state = loadState(file);
@@ -180,13 +181,7 @@ export default {
     });
     if (counters.read < pool.length) ctx.progress?.(`Sites carrières : budget de temps atteint, ${counters.read}/${pool.length} entreprises relues`);
 
-    // 3. Entreprises découvertes à vérifier (liens trouvés, revérifications échues).
-    await runAll(dueForCheck(state), async (c) => {
-      await readCompany(c);
-      counters.checked++;
-    });
-
-    // 4. Identifiants devinés à partir des entreprises qui recrutent déjà des devs dans le board, les plus actives d'abord.
+    // 3. Identifiants devinés à partir des entreprises qui recrutent déjà des devs dans le board, les plus actives d'abord.
     state.names ||= {};
     const byName = new Map();
     for (const item of corpus) {
@@ -226,9 +221,27 @@ export default {
       counters.guessed++;
     });
 
+    // 4. Entreprises découvertes à vérifier (liens trouvés, index Common Crawl, revérifications échues).
+    await runAll(dueForCheck(state), async (c) => {
+      await readCompany(c);
+      counters.checked++;
+    });
+
+    // 5. Temps restant : nouvelles adresses dans l'index Common Crawl, vérifiées lors des prochaines actualisations.
+    let harvested = 0;
+    if (timeLeft() && process.env.CAREERS_HARVEST !== '0') {
+      const until = Math.min(deadline, Date.now() + num(process.env.CAREERS_HARVEST_MINUTES, 10) * 60e3);
+      state.harvest ||= {};
+      const found = await harvestCommonCrawl(state.harvest, { timeLeft: () => Date.now() < until, log: (m) => ctx.progress?.(m) }).catch((err) => {
+        ctx.progress?.(`Common Crawl indisponible : ${err.message}`);
+        return [];
+      });
+      harvested = addCandidates(state, found, 'commoncrawl');
+    }
+
     saveState(file, state);
     const all = Object.values(state.companies);
-    const msg = `Sites carrières : ${poolCompanies(state).length} entreprises suivies (${counters.joined} nouvelles), ${all.length} connues, ${counters.read} relues, ${counters.checked} vérifiées, ${counters.guessed}/${names.length} noms essayés, ${linkedAdded} liens découverts, ${out.length} offres, ${Math.round((Date.now() - t0) / 60000)} min`;
+    const msg = `Sites carrières : ${poolCompanies(state).length} entreprises suivies (${counters.joined} nouvelles), ${all.length} connues, ${counters.read} relues, ${counters.checked} vérifiées, ${counters.guessed}/${names.length} noms essayés, ${linkedAdded} liens découverts, ${harvested} adresses Common Crawl, ${out.length} offres, ${Math.round((Date.now() - t0) / 60000)} min`;
     ctx.progress?.(msg);
     const refused = limiter.stats();
     if (refused.length) ctx.progress?.(`Sites carrières, refus : ${refused.join(' ; ')}`);
