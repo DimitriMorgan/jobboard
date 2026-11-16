@@ -186,3 +186,9 @@ code { background: var(--bg-3); padding: 1px 5px; border-radius: 4px; }
 .modal { position: fixed; top: 10vh; left: 50%; transform: translateX(-50%); width: min(640px, 94vw); background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); z-index: 32; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 12px; }
 .modal h2 { margin: 0; font-size: 18px; }
 .modal textarea { font-family: ui-monospace, monospace; font-size: 12px; }
+
+.companies-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; font-size: 13px; }
+.companies-bar input[type='search'] { flex: 1; min-width: 200px; }
+.companies-add { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
+.companies-add textarea { flex: 1; }
+@media (max-width: 700px) { .companies-add { flex-direction: column; } .companies-add textarea { width: 100%; } }

@@ -6,6 +6,7 @@ import { openDb, STATUSES } from './db.js';
 import { createRefresher } from './refresh.js';
 import { CONNECTORS, connectorAvailability } from './connectors/index.js';
 import { TECHS, CONTRACTS, repairJob, isExcludedJob, htmlToText } from './normalize.js';
+import { loadState, publicPool } from './careers/state.js';
 import { manualLinks, MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 import { loadEnv } from './env.js';
 
@@ -16,6 +17,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = path.resolve(process.env.DB_PATH || path.join(__dirname, '..', 'data', 'jobboard.sqlite'));
 
 const db = openDb(DB_PATH);
+// Annuaire des sites carrières, à côté de la base.
+process.env.CAREERS_STATE_FILE ||= path.join(path.dirname(DB_PATH), 'careers-state.json');
 db.dropTech('dotnet', (title, html) => isExcludedJob(title, htmlToText(html)));
 const repairedAtStart = db.repairIncomplete(repairJob);
 if (repairedAtStart) console.log(`${repairedAtStart} offres complétées depuis leur description.`);
@@ -79,12 +82,17 @@ app.delete('/api/jobs/:id', (req, res) => {
 app.post('/api/refresh', (req, res) => {
   const only = list(req.body?.only || req.query.only);
   const manualUrls = Array.isArray(req.body?.manualUrls) ? req.body.manualUrls.map(String) : list(req.body?.manualUrls);
+  const companyUrls = Array.isArray(req.body?.companyUrls) ? req.body.companyUrls.map(String) : list(req.body?.companyUrls);
   if (refresher.status().running) return res.status(409).json({ error: 'Une actualisation est déjà en cours', status: refresher.status() });
-  refresher.refresh({ only, manualUrls }).catch((err) => console.error('Actualisation échouée', err));
+  refresher.refresh({ only, manualUrls, companyUrls }).catch((err) => console.error('Actualisation échouée', err));
   res.status(202).json(refresher.status());
 });
 
 app.get('/api/refresh/status', (_req, res) => res.json(refresher.status()));
+
+app.get('/api/companies', (_req, res) => {
+  res.json(publicPool(loadState(process.env.CAREERS_STATE_FILE)));
+});
 
 app.get('/api/sources', (_req, res) => {
   const { counts, rows } = db.sourceStats();

@@ -23,10 +23,11 @@ import freelancerepublik from './freelancerepublik.js';
 import lesjeudis from './lesjeudis.js';
 import codeur from './codeur.js';
 import workingnomads from './workingnomads.js';
+import careers from './careers.js';
 
-// LinkedIn en premier : c'est la source la plus longue (pagination profonde + fiches), elle démarre tout de suite.
+// LinkedIn puis les sites carrières en premier : ce sont les sources les plus longues, elles démarrent tout de suite.
 export const CONNECTORS = [
-  linkedin, freework, wttj, apec, hellowork, collective, freelanceinformatique, freelancerepublik, lesjeudis, meteojob, jobijoba, codeur,
+  linkedin, careers, freework, wttj, apec, hellowork, collective, freelanceinformatique, freelancerepublik, lesjeudis, meteojob, jobijoba, codeur,
   linkedinposts, francetravail, adzuna, jooble, remotive, arbeitnow, jobicy, remoteok, himalayas, weworkremotely, workingnomads, themuse, hackernews,
 ];
 

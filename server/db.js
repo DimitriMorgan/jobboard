@@ -208,6 +208,11 @@ export function openDb(dbPath) {
       return new Set(stmts.sourceIds.all(source).map((r) => r.source_id));
     },
     /** Offres déjà en base pour une source : infos utiles aux connecteurs pour décider d'aller chercher le détail. */
+    /** Entreprise, liens et description de toutes les offres (découverte des sites carrières). */
+    corpus() {
+      return db.prepare('SELECT company, url, apply_url AS applyUrl, description FROM jobs').all();
+    },
+
     knownJobs(source) {
       const rows = db
         .prepare(`SELECT source_id, title, company, location, url, contracts, tags, first_seen_at, last_seen_at, length(COALESCE(description, '')) AS desc_len FROM jobs WHERE source = ?`)

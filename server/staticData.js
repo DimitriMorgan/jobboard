@@ -6,8 +6,10 @@ import { CONNECTORS, connectorAvailability } from './connectors/index.js';
 import { TECHS, CONTRACTS } from './normalize.js';
 import { MANUAL_PLATFORMS } from '../shared/manualLinks.js';
 import { DESCRIPTION_SHARDS, DESCRIPTIONS_DIR, shardFile, shardOf } from '../shared/shard.js';
+import { loadState, publicPool, STATE_FILE } from './careers/state.js';
 
 export const JOBS_FILE = 'jobs.json';
+export const COMPANIES_FILE = 'companies.json';
 /** Ancien format : toutes les descriptions dans un seul fichier (encore lu à l'import, plus écrit). */
 export const LEGACY_DESCRIPTIONS_FILE = 'descriptions.json';
 
@@ -60,6 +62,8 @@ export function exportStatic(db, dir) {
   shards.forEach((content, n) => fs.writeFileSync(path.join(dir, shardFile(n)), JSON.stringify(content)));
   fs.rmSync(path.join(dir, LEGACY_DESCRIPTIONS_FILE), { force: true });
   fs.writeFileSync(path.join(dir, JOBS_FILE), JSON.stringify(payload));
+  // Entreprises suivies sur leur site carrière (onglet Entreprises du site).
+  fs.writeFileSync(path.join(dir, COMPANIES_FILE), JSON.stringify(publicPool(loadState(path.join(dir, STATE_FILE)))));
   return { jobs: jobs.length, descriptions: Object.keys(descriptions).length, files: shards.length };
 }
 

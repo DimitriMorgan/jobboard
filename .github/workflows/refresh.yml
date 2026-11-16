@@ -15,6 +15,10 @@ on:
         description: 'Posts ou offres LinkedIn à ajouter (URL séparées par des espaces)'
         required: false
         default: ''
+      company_urls:
+        description: 'Pages carrière d’entreprises à suivre (URL séparées par des espaces)'
+        required: false
+        default: ''
   push:
     branches: ['**']
 
@@ -56,6 +60,8 @@ jobs:
         env:
           ONLY_SOURCES: ${{ inputs.sources }}
           LINKEDIN_POST_URLS: ${{ inputs.linkedin_urls }}
+          COMPANY_URLS: ${{ inputs.company_urls }}
+          CAREERS_MAX_MINUTES: ${{ vars.CAREERS_MAX_MINUTES || 35 }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           RETENTION_DAYS: ${{ vars.RETENTION_DAYS || 60 }}
@@ -87,6 +93,7 @@ jobs:
           # On repart d'un dossier vide : les fichiers qui n'existent plus (ancien descriptions.json) disparaissent.
           (cd /tmp/data-wt && git rm -rfq . 2>/dev/null || true)
           cp -r data/static/jobs.json data/static/descriptions /tmp/data-wt/
+          cp data/static/companies.json data/static/careers-state.json /tmp/data-wt/ 2>/dev/null || true
           cd /tmp/data-wt
           git add -A
           git commit -m "Données du $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "Aucun changement"
@@ -104,6 +111,7 @@ jobs:
         run: |
           mkdir -p client/dist/data
           cp -r data/static/jobs.json data/static/descriptions client/dist/data/
+          cp data/static/companies.json client/dist/data/ 2>/dev/null || true
 
       - name: Déployer le site sur la branche gh-pages
         run: |

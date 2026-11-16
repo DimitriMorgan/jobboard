@@ -21,9 +21,13 @@ if (repaired) console.log(`Offres complétées depuis leur description (contrat,
 
 const only = (process.env.ONLY_SOURCES || '').split(/[\s,]+/).filter(Boolean);
 const manualUrls = (process.env.LINKEDIN_POST_URLS || '').split(/\s+/).filter(Boolean);
+const companyUrls = (process.env.COMPANY_URLS || '').split(/\s+/).filter(Boolean);
+// Annuaire des sites carrières : stocké à côté des données publiées.
+process.env.CAREERS_STATE_FILE ||= path.join(dir, 'careers-state.json');
 if (only.length) console.log(`Actualisation partielle : ${only.join(', ')}`);
 if (manualUrls.length) console.log(`URL LinkedIn ajoutées à la main : ${manualUrls.length}`);
-const result = await createRefresher(db, { log: console }).refresh({ only, manualUrls });
+if (companyUrls.length) console.log(`Pages carrière ajoutées à la main : ${companyUrls.length}`);
+const result = await createRefresher(db, { log: console }).refresh({ only, manualUrls, companyUrls });
 for (const [id, s] of Object.entries(result.sources)) console.log(`${id.padEnd(16)} ${s.status.padEnd(8)} ${s.message || ''}${s.error ? ' — ' + s.error : ''}`);
 
 const purged = db.purgeOlderThan(retentionDays);

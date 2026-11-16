@@ -168,15 +168,21 @@ export const api = {
 
   manualLinks: async (tech, contract) => manualLinks(tech, contract),
 
+  /** Entreprises suivies sur leur site carrière (fichier publié avec les données). */
+  async companies() {
+    const d = await loadData().catch(() => null);
+    return fetchJson('companies.json', false, d?.generatedAt).catch(() => []);
+  },
+
   refreshStatus: async () => ({ ...state }),
 
   /**
    * Déclenche le workflow GitHub. `only` : sources à actualiser (actualisation partielle, rapide) ;
    * `manualUrls` : posts / offres LinkedIn à ajouter.
    */
-  async refresh(only, { manualUrls = [] } = {}) {
+  async refresh(only, { manualUrls = [], companyUrls = [] } = {}) {
     if (state.running) return { ...state };
-    const partial = !!(only?.length || manualUrls.length);
+    const partial = !!(only?.length || manualUrls.length || companyUrls.length);
     const cfg = getSettings();
     if (!cfg.token || !cfg.repo) {
       const err = new Error('Pour actualiser depuis le site, renseignez un jeton GitHub dans l’onglet Sources → Paramètres. Sinon, lancez le workflow « Actualiser les offres » depuis l’onglet Actions du dépôt GitHub.');
@@ -185,7 +191,7 @@ export const api = {
     }
     const before = data?.generatedAt || null;
     Object.assign(state, { running: true, startedAt: new Date().toISOString(), finishedAt: null, message: 'Déclenchement du workflow GitHub…', runUrl: null, error: null });
-    const inputs = partial ? { sources: (only || []).join(','), linkedin_urls: manualUrls.join(' ') } : undefined;
+    const inputs = partial ? { sources: (only || []).join(','), linkedin_urls: manualUrls.join(' '), ...(companyUrls.length ? { company_urls: companyUrls.join(' ') } : {}) } : undefined;
     try {
       await dispatchWorkflow(cfg, inputs);
     } catch (err) {

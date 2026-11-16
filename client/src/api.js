@@ -25,7 +25,8 @@ const serverApi = {
   },
   job: (id) => http(`/api/jobs/${encodeURIComponent(id)}`),
   updateJob: (id, patch) => http(`/api/jobs/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  refresh: (only, { manualUrls = [] } = {}) => http('/api/refresh', { method: 'POST', body: JSON.stringify({ only: only?.join(',') || '', manualUrls }) }),
+  refresh: (only, { manualUrls = [], companyUrls = [] } = {}) => http('/api/refresh', { method: 'POST', body: JSON.stringify({ only: only?.join(',') || '', manualUrls, companyUrls }) }),
+  companies: () => http('/api/companies'),
   refreshStatus: () => http('/api/refresh/status'),
   manualLinks: (tech, contract) => http(`/api/manual-links?tech=${tech}&contract=${contract || ''}`),
 };

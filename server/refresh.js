@@ -28,7 +28,11 @@ export function createRefresher(db, { concurrency = 4, log = console, connectors
       lastSuccessAt: info?.last_success_at || null,
       /** URL ajoutées à la main (posts ou offres LinkedIn) et mode « ajout seul » (pas de recherche complète). */
       manualUrls: opts.manualUrls || [],
+      /** Pages carrière d'entreprises ajoutées à la main (source « careers »). */
+      companyUrls: opts.companyUrls || [],
       manualOnly: !!opts.manualOnly,
+      /** Toutes les offres en base, toutes sources (entreprise, liens, description) : sert à découvrir des entreprises. */
+      corpus: () => db.corpus?.() || [],
       progress: (msg) => {
         src.message = msg;
         log.info?.(`[${c.id}] ${msg}`);
@@ -70,7 +74,7 @@ export function createRefresher(db, { concurrency = 4, log = console, connectors
     }
   }
 
-  async function refresh({ only, manualUrls = [], partial } = {}) {
+  async function refresh({ only, manualUrls = [], companyUrls = [], partial } = {}) {
     if (state.running) return snapshot();
     const isPartial = partial ?? !!only?.length;
     const run = db.startRun({ partial: isPartial });
@@ -82,7 +86,7 @@ export function createRefresher(db, { concurrency = 4, log = console, connectors
     }
     const runnable = targets.filter((c) => connectorAvailability(c).enabled);
     try {
-      const opts = { manualUrls, manualOnly: isPartial && manualUrls.length > 0 };
+      const opts = { manualUrls, companyUrls, manualOnly: isPartial && (manualUrls.length > 0 || companyUrls.length > 0) };
       await mapLimit(runnable, concurrency, (c) => runConnector(c, run.id, opts));
     } finally {
       state.running = false;

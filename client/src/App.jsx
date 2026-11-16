@@ -7,6 +7,7 @@ import JobDetail from './components/JobDetail.jsx';
 import SourcesPanel from './components/SourcesPanel.jsx';
 import TrackingBoard from './components/TrackingBoard.jsx';
 import AddLinkedin from './components/AddLinkedin.jsx';
+import CompaniesPanel from './components/CompaniesPanel.jsx';
 import { groupDuplicates } from './dedupe.js';
 
 const FILTERS_KEY = 'jobboard.filters.v1';
@@ -174,6 +175,7 @@ export default function App() {
           {[
             ['offres', 'Offres'],
             ['suivi', 'Mon suivi'],
+            ['entreprises', 'Entreprises'],
             ['sources', 'Sources'],
           ].map(([id, label]) => (
             <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
@@ -240,7 +242,16 @@ export default function App() {
         </div>
       ) : null}
 
-      {tab === 'sources' ? (
+      {tab === 'entreprises' ? (
+        <CompaniesPanel
+          refreshState={refresh}
+          onAdd={(companyUrls) => onRefresh(['careers'], { companyUrls })}
+          onShowJobs={(name) => {
+            setFilters({ ...filters, q: name, sinceDays: 0 });
+            setTab('offres');
+          }}
+        />
+      ) : tab === 'sources' ? (
         <SourcesPanel meta={meta} refreshState={refresh} onRefresh={onRefresh} filters={filters} />
       ) : tab === 'suivi' ? (
         <TrackingBoard onSelect={setSelectedId} selectedId={selectedId} onUpdate={onUpdate} />
