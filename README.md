@@ -47,6 +47,7 @@ Les données sont stockées dans `data/jobboard.sqlite` (modifiable via `DB_PATH
 | Source | Type | Périmètre | Remarques |
 | --- | --- | --- | --- |
 | LinkedIn (offres) | Endpoint public « guest » (HTML) | France, depuis la dernière actualisation (24 h à 7 jours) | 9 requêtes (react, node.js, php, javascript, typescript, symfony, nestjs, laravel, freelance) en pagination profonde ; fiche de chaque nouvelle offre lue pour le type de contrat (LinkedIn ignore les filtres de contrat hors connexion). Budget : `LINKEDIN_MAX_REQUESTS` (1300), `LINKEDIN_DETAIL_LIMIT` (1000), `LINKEDIN_MAX_MINUTES` (40 : au-delà, les résultats partiels sont publiés). Rythme ralenti automatiquement en cas de 429 |
+| Sites des entreprises | Interfaces publiques des plateformes de recrutement (Lever, Greenhouse, Ashby, Recruitee, Teamtailor, Workable, SmartRecruiters, Personio) | Postes tech en France ou en télétravail depuis la France | Annuaire d'entreprises constitué automatiquement (voir ci-dessous), relu chaque jour. Budget : `CAREERS_MAX_MINUTES` (35) |
 | Posts LinkedIn | Posts publics (JSON-LD) | Annonces publiées en posts (« je recrute… ») | Ajout manuel depuis le site (bouton « ＋ Post LinkedIn » ou favori « Ajouter au JobBoard »). Découverte automatique optionnelle avec `TAVILY_API_KEY` (gratuit, 1 000 requêtes/mois) ou `SERPAPI_KEY` ; les candidats (« je suis disponible… ») sont écartés |
 | Free-Work | API JSON du site | Freelance + CDI IT France | Descriptions complètes, TJM / salaire |
 | Welcome to the Jungle | Index Algolia public du site + API détail | France + full remote | Clés Algolia surchargables dans `.env` si elles changent |
@@ -70,6 +71,17 @@ Sites testés depuis GitHub Actions mais non intégrables : Indeed, Glassdoor, M
 Une même offre publiée sur plusieurs sites (même entreprise, même intitulé) est affichée une seule fois, avec des liens « + autre site ».
 
 Les sources sont désactivables via `DISABLED_SOURCES=hellowork,hackernews`.
+
+### Sites carrières des entreprises
+
+L'onglet **Entreprises** liste les entreprises dont le board relit chaque jour la page carrière. L'annuaire (`careers-state.json` sur la branche `data`) se remplit tout seul :
+
+1. liens vers une plateforme de recrutement trouvés dans les offres déjà collectées ;
+2. identifiants devinés à partir du nom des entreprises qui recrutent des devs dans le board (« Back Market » → `backmarket`, `back-market`), testés sur chaque plateforme ;
+3. adresses de pages carrière trouvées dans l'index public Common Crawl, avec le temps restant ;
+4. ajouts manuels depuis l'onglet Entreprises (page Lever, Greenhouse… ou page « carrières » du site de l'entreprise qui y renvoie).
+
+Une entreprise est suivie dès qu'elle publie une offre en France, et cesse de l'être après 60 jours sans (sauf ajout manuel). Seuls les postes tech (développeur, ingénieur logiciel, tech lead…) situés en France ou en télétravail ouvert depuis la France sont ajoutés au board. Workday, utilisé par les grands groupes, bloque les requêtes et n'est pas pris en charge.
 
 ### Ajouter un post LinkedIn vu dans son fil
 
@@ -98,7 +110,7 @@ Mise en place (une seule fois) :
 2. **Pages** : le workflow pousse le site construit sur la branche `gh-pages`. GitHub active en général Pages automatiquement pour cette branche ; sinon, Settings → Pages → Source : **Deploy from a branch** → `gh-pages` / `(root)`.
 3. **Première actualisation** : onglet Actions → « Actualiser les offres et publier le site » → *Run workflow*. Le site est ensuite disponible sur `https://<utilisateur>.github.io/<dépôt>/`.
 4. **Bouton Actualiser et synchronisation du suivi** (optionnel) : créez un jeton personnel à granularité fine (Settings → Developer settings → Fine-grained tokens) avec, sur le dépôt du site, *Actions : Read and write* et, sur un dépôt **privé** dédié au suivi (par exemple `jobboard-suivi`), *Contents : Read and write*. Renseignez-le dans l'onglet Sources → Paramètres GitHub du site. Le jeton ne quitte jamais votre navigateur.
-5. **Clés API optionnelles** (France Travail, Adzuna, Jooble, `TAVILY_API_KEY` ou `SERPAPI_KEY` pour découvrir des posts LinkedIn) : Settings → Secrets and variables → Actions → *Secrets*. Réglages (`LINKEDIN_MAX_REQUESTS`, `LINKEDIN_DETAIL_LIMIT`, `LINKEDIN_MAX_MINUTES`, `DETAIL_FETCH_LIMIT`, `DISABLED_SOURCES`, `RETENTION_DAYS`) : même écran, onglet *Variables*.
+5. **Clés API optionnelles** (France Travail, Adzuna, Jooble, `TAVILY_API_KEY` ou `SERPAPI_KEY` pour découvrir des posts LinkedIn) : Settings → Secrets and variables → Actions → *Secrets*. Réglages (`LINKEDIN_MAX_REQUESTS`, `LINKEDIN_DETAIL_LIMIT`, `LINKEDIN_MAX_MINUTES`, `CAREERS_MAX_MINUTES`, `DETAIL_FETCH_LIMIT`, `DISABLED_SOURCES`, `RETENTION_DAYS`) : même écran, onglet *Variables*.
 
 Sans jeton, le bouton Actualiser du site indique comment lancer le workflow depuis GitHub ; l'actualisation planifiée du matin fonctionne dans tous les cas.
 
