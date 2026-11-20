@@ -268,7 +268,7 @@ export default function App() {
                     + {hiddenUnknown} au contrat non précisé
                   </button>
                 ) : null}
-                {stats?.newCount ? <span className="pill new"> {stats.newCount} nouvelle{stats.newCount > 1 ? 's' : ''} depuis la dernière actualisation</span> : null}
+                {stats?.newCount ? <span className="pill new"> {stats.newCount} nouvelle{stats.newCount > 1 ? 's' : ''} en 24 h</span> : null}
               </span>
               <label className="sort">
                 Tri

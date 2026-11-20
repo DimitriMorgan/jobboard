@@ -1,6 +1,9 @@
 // Filtrage / tri côté navigateur (mode statique) — mêmes règles que db.listJobs côté serveur.
 const DAY = 86400e3;
 
+/** Contrat non précisé par la source (ex. fiche LinkedIn non lue) : ni CDI, ni freelance, ni autre type connu. */
+export const isUnknownContract = (j) => !j.contracts?.length || j.contracts.every((c) => c === 'autre');
+
 export function filterJobs(jobs, f = {}) {
   const now = Date.now();
   const q = (f.q || '').trim().toLowerCase();
@@ -8,7 +11,7 @@ export function filterJobs(jobs, f = {}) {
   const staleLimit = now - 7 * DAY;
   let out = jobs.filter((j) => {
     if (f.techs?.length && !f.techs.some((t) => j.techs.includes(t))) return false;
-    if (f.contracts?.length && !f.contracts.some((c) => j.contracts.includes(c))) return false;
+    if (f.contracts?.length && !f.contracts.some((c) => j.contracts.includes(c)) && !(f.unknownContract && isUnknownContract(j))) return false;
     if (f.sources?.length && !f.sources.includes(j.source)) return false;
     if (f.statuses?.length && !f.statuses.includes(j.status)) return false;
     if (f.country === 'FR' && j.country !== 'FR') return false;

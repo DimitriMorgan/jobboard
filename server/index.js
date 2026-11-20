@@ -43,6 +43,7 @@ app.get('/api/jobs', (req, res) => {
   const jobs = db.listJobs({
     techs: list(q.techs),
     contracts: list(q.contracts),
+    unknownContract: q.unknownContract === '1' || q.unknownContract === 'true',
     sources: list(q.sources),
     statuses: list(q.statuses),
     country: q.country || '',

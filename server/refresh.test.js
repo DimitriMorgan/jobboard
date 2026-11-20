@@ -43,6 +43,10 @@ test('actualisation : isolation des erreurs, insertion, suivi et filtres', async
   const st2 = await r.refresh();
   assert.equal(st2.sources.good.newCount, 0);
   assert.equal(db.getJob('good:b').status, 'candidature_envoyee');
+  // Badge « Nouveau » : découvertes dans les 24 h précédant la dernière actualisation complète.
+  assert.equal(db.listJobs({ onlyNew: true }).length, 2);
+  db.raw.prepare('UPDATE jobs SET first_seen_at = ?').run(new Date(Date.now() - 2 * 86400e3).toISOString());
+  await r.refresh();
   assert.equal(db.listJobs({ onlyNew: true }).length, 0);
   assert.equal(db.stats().total, 2);
   db.close();
@@ -59,6 +63,24 @@ test('actualisation partielle : les offres ajoutées sont « nouvelles » sans e
   assert.equal(db.listJobs({ onlyNew: true }).length, 2);
   await tick();
   await createRefresher(db, { log: {}, connectors: [fake('a', [job('1', 'Dev React')])] }).refresh();
+  assert.equal(db.listJobs({ onlyNew: true }).length, 2); // toujours dans la fenêtre de 24 h
+  db.raw.prepare('UPDATE jobs SET first_seen_at = ?').run(new Date(Date.now() - 2 * 86400e3).toISOString());
+  await createRefresher(db, { log: {}, connectors: [fake('a', [job('1', 'Dev React')])] }).refresh();
   assert.equal(db.listJobs({ onlyNew: true }).length, 0);
+  db.close();
+});
+
+test('filtre contrat : les offres au contrat non précisé restent visibles si demandé', async () => {
+  const { filterJobs } = await import('../client/src/staticFilter.js');
+  const db = openDb(':memory:');
+  const job = (id, title) => ({ sourceId: id, title, company: 'X', location: 'Paris', url: `https://x/${id}`, descriptionText: 'React' });
+  await createRefresher(db, { log: {}, connectors: [fake('a', [job('1', 'Dev React freelance'), job('2', 'Dev React'), job('3', 'Stage dev React')])] }).refresh();
+  const contracts = (j) => j.contracts.join('+');
+  assert.deepEqual(db.listJobs({}).map(contracts).sort(), ['autre', 'freelance', 'stage']);
+  assert.equal(db.listJobs({ contracts: ['freelance', 'cdi'] }).length, 1);
+  assert.equal(db.listJobs({ contracts: ['freelance', 'cdi'], unknownContract: true }).length, 2);
+  const all = db.listJobs({});
+  assert.equal(filterJobs(all, { contracts: ['freelance', 'cdi'] }).length, 1);
+  assert.equal(filterJobs(all, { contracts: ['freelance', 'cdi'], unknownContract: true }).length, 2);
   db.close();
 });

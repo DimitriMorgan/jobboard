@@ -7,7 +7,7 @@ Plateforme locale qui agrège les offres d'emploi **freelance et CDI** pour les 
 - une **fiche détaillée** par offre (description, contrat, technos, dates, doublons repérés sur d'autres plateformes) avec **lien direct vers l'offre** ;
 - la **rémunération structurée** : **TJM** (€/jour) pour le freelance et **salaire annuel** pour le CDI, extraits des données des plateformes ou du texte de l'offre (« TJM 550 », « 500-600 €/jour », « 45-55k€ », « 3 400 € brut / mois »…), avec filtres « TJM minimum » / « salaire minimum », tri par rémunération et médianes affichées ;
 - un **suivi de candidatures** : statut (nouveau, vu, à postuler, candidature envoyée, relancé, entretien, offre reçue, refus, ignoré), notes personnelles, favoris, tableau « Mon suivi » ;
-- le marquage **« Nouveau »** des offres apparues depuis la dernière actualisation, pour une consultation quotidienne ;
+- le marquage **« Nouveau »** des offres apparues dans les dernières 24 h, pour une consultation quotidienne ;
 - une page **Sources** avec l'état de chaque connecteur et des liens de recherche pré-remplis vers les plateformes sans API exploitable.
 
 Deux modes de fonctionnement :
@@ -102,7 +102,7 @@ Une offre non revue depuis 7 jours est signalée « peut-être retirée » (filt
 
 ## Hébergement gratuit : GitHub Actions + GitHub Pages (sans serveur)
 
-Le projet peut tourner sans aucun serveur : un workflow GitHub Actions (`.github/workflows/refresh.yml`) actualise les offres chaque matin (planifié à 03:17 UTC, GitHub pouvant retarder le départ) ou à la demande, publie les données JSON sur une branche `data`, construit le front en mode statique et le déploie sur GitHub Pages.
+Le projet peut tourner sans aucun serveur : un workflow GitHub Actions (`.github/workflows/refresh.yml`) actualise les offres deux fois par jour (planifié à 03:17 et 15:17 UTC, GitHub retardant souvent le départ de plusieurs heures) ou à la demande, publie les données JSON sur une branche `data`, construit le front en mode statique et le déploie sur GitHub Pages.
 
 Mise en place (une seule fois) :
 
@@ -120,7 +120,7 @@ Points d'attention :
 - GitHub désactive les workflows planifiés après 60 jours sans activité sur le dépôt ; un simple commit ou un lancement manuel les réactive.
 - Les offres non revues depuis `RETENTION_DAYS` jours (60 par défaut) sont purgées de l'export.
 - Les fiches détaillées (description, type de contrat) sont lues pour les nouvelles offres, dans la limite de `LINKEDIN_DETAIL_LIMIT` pour LinkedIn et `DETAIL_FETCH_LIMIT` pour les autres sources ; les offres connues sans fiche sont complétées au fil des jours. Une offre revue sans sa fiche ne perd jamais les informations déjà obtenues (contrat, critères, rémunération).
-- L'actualisation complète dure maintenant 30 à 40 minutes (pagination LinkedIn et lecture des fiches, au rythme d'une requête toutes les 1,3 s environ) ; un ajout de post LinkedIn est une actualisation partielle de 1 à 2 minutes. Le badge « Nouveau » désigne les offres découvertes depuis la dernière actualisation complète.
+- L'actualisation complète dure maintenant 30 à 40 minutes (pagination LinkedIn et lecture des fiches, au rythme d'une requête toutes les 1,3 s environ) ; un ajout de post LinkedIn est une actualisation partielle de 1 à 2 minutes. Le badge « Nouveau » désigne les offres découvertes dans les 24 h précédant la dernière actualisation complète (deux actualisations rapprochées ne le font pas disparaître). Par défaut, la liste Freelance + CDI inclut aussi les offres dont le contrat n’est pas précisé (souvent des offres LinkedIn dont la fiche n’a pas pu être lue) ; une case du filtre Contrat permet de les masquer.
 - Les données publiées vivent sur la branche `data` du dépôt (`jobs.json`, et les descriptions réparties en 64 fichiers `descriptions/NN.json` pour que le site ne charge que celui de l'offre ouverte), écrasées à chaque actualisation.
 - En local, le mode statique se teste avec `npm run refresh:static` (données dans `data/static/`) puis `npm run dev:static`.
 

@@ -42,7 +42,8 @@ test('export puis import statique conservent offres, run et sources', async () =
   assert.equal(db2.getJob('fake:a').description, '<p>React</p>');
   assert.equal(db2.getJob('fake:a').firstSeenAt, db1.getJob('fake:a').firstSeenAt);
   assert.ok(db2.listJobs({ onlyNew: true }).length === 3);
-  // Nouvelle actualisation sans nouveauté : plus rien de « nouveau »
+  // Nouvelle actualisation sans nouveauté, plus de 24 h après leur découverte : plus rien de « nouveau »
+  db2.raw.prepare('UPDATE jobs SET first_seen_at = ?').run(new Date(Date.now() - 2 * 86400e3).toISOString());
   await createRefresher(db2, { log: {}, connectors: [{ id: 'fake', name: 'Fake', fetch: async () => jobs }] }).refresh();
   assert.equal(db2.listJobs({ onlyNew: true }).length, 0);
   assert.equal(db2.purgeOlderThan(60), 0);

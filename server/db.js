@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const STATUSES = ['nouveau', 'vu', 'a_postuler', 'candidature_envoyee', 'relance', 'entretien', 'offre_recue', 'refus', 'ignore'];
+/** Fenêtre du badge « Nouveau » : offres découvertes dans les 24 h précédant la dernière actualisation complète. */
+export const NEW_WINDOW_MS = 24 * 3600e3;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS jobs (
@@ -199,7 +201,12 @@ export function openDb(dbPath) {
     deleteJob: db.prepare('DELETE FROM jobs WHERE id = ?'),
   };
 
-  const newSince = () => stmts.latestRun.get()?.started_at ?? null;
+  // « Nouvelle » = découverte dans les 24 h précédant la dernière actualisation complète : deux actualisations
+  // rapprochées (bouton du site + passage quotidien) ne font pas disparaître les badges de la veille.
+  const newSince = () => {
+    const start = stmts.latestRun.get()?.started_at;
+    return start ? new Date(Date.parse(start) - NEW_WINDOW_MS).toISOString() : null;
+  };
 
   return {
     raw: db,
@@ -424,7 +431,12 @@ export function openDb(dbPath) {
         for (const v of values) params.push(`%"${v}"%`);
       };
       orGroup(filters.techs, 'techs');
-      orGroup(filters.contracts, 'contracts');
+      if (filters.contracts?.length) {
+        // Contrat non précisé par la source (fiche LinkedIn non lue…) : gardée si demandé, pour ne pas masquer ces offres.
+        const unknown = filters.unknownContract ? ` OR contracts IN ('[]', '["autre"]')` : '';
+        where.push(`(${filters.contracts.map(() => 'contracts LIKE ?').join(' OR ')}${unknown})`);
+        for (const v of filters.contracts) params.push(`%"${v}"%`);
+      }
       if (filters.sources?.length) {
         where.push(`source IN (${filters.sources.map(() => '?').join(',')})`);
         params.push(...filters.sources);

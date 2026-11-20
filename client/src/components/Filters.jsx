@@ -5,6 +5,7 @@ export const DEFAULT_FILTERS = {
   q: '',
   techs: [],
   contracts: ['freelance', 'cdi'],
+  unknownContract: true,
   sources: [],
   statuses: [],
   country: 'FR_OR_REMOTE',
@@ -59,6 +60,13 @@ export default function Filters({ meta, stats, filters, onChange }) {
             </Chip>
           ))}
         </div>
+        {filters.contracts.length && !filters.contracts.includes('autre') ? (
+          <label className="small check">
+            <input type="checkbox" checked={!!filters.unknownContract} onChange={(e) => set({ unknownContract: e.target.checked })} /> Inclure les offres au contrat non précisé
+            {stats?.byContract?.autre ? ` (${stats.byContract.autre})` : ''}
+          </label>
+        ) : null}
+        <p className="hint">Beaucoup d'offres LinkedIn n'indiquent leur contrat que sur la fiche détaillée, pas toujours lue.</p>
       </div>
 
       <div className="filter-group">
@@ -86,7 +94,7 @@ export default function Filters({ meta, stats, filters, onChange }) {
           <option value={0}>Toutes</option>
         </select>
         <label className="check">
-          <input type="checkbox" checked={filters.onlyNew} onChange={(e) => set({ onlyNew: e.target.checked })} /> Nouvelles depuis la dernière actualisation
+          <input type="checkbox" checked={filters.onlyNew} onChange={(e) => set({ onlyNew: e.target.checked })} /> Nouvelles (découvertes en 24 h)
         </label>
         <label className="check">
           <input type="checkbox" checked={filters.favorite} onChange={(e) => set({ favorite: e.target.checked })} /> Favoris uniquement
